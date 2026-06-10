@@ -39,11 +39,23 @@ export default function AdminBatteryQc() {
         setQc(null);
         const status = (err as { response?: { status?: number } })?.response?.status;
         const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-        setError(
-          status === 404
-            ? "Battery not found."
-            : (detail ?? "Failed to load battery QC. Check backend is running and migration 025 is applied."),
-        );
+        if (status === 404) {
+          const missingRoute =
+            typeof detail === "string" &&
+            detail.toLowerCase() === "not found" &&
+            detail !== "Battery not found";
+          setError(
+            missingRoute
+              ? "Battery QC API is missing on the server. Deploy the latest backend and run: alembic upgrade head"
+              : (typeof detail === "string" ? detail : "Battery not found."),
+          );
+        } else {
+          setError(
+            typeof detail === "string"
+              ? detail
+              : "Failed to load battery QC. Check backend is running and migration 025 is applied.",
+          );
+        }
       })
       .finally(() => setLoading(false));
   };
