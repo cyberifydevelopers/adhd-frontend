@@ -1211,7 +1211,7 @@ export default function UserReport() {
             value: Math.max(0, Math.min(100, avg)),
           };
         })
-        .filter((row): row is PdfGraphRow => row !== null)
+        .filter((row): row is NonNullable<typeof row> => row !== null)
         .slice(0, 8);
 
       if (taskRows.length) return taskRows;

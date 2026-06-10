@@ -87,7 +87,6 @@ export default function ContinuousPerformanceTest() {
   const pendingNextTask = catStore((s) => s.pendingNextTask);
   const requestRoutingDecision = catStore((s) => s.requestRoutingDecision);
   const shouldTrigger = catStore((s) => s.shouldTriggerBlockEnd);
-  const triggerReason = catStore((s) => s.blockEndTriggerReason);
   const clearTrigger = catStore((s) => s.clearTrigger);
   const finishMainRef = useRef(finishMain);
   const handleRoutingRef = useRef<(reason: string) => Promise<void>>(async () => {});

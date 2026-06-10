@@ -111,13 +111,6 @@ describe("Flanker adaptive stopping (spec)", () => {
   });
 
   it("does not stable-stop at second checkpoint when trials-at-difficulty is below 20", () => {
-    const cp40 = flankerCp(40, {
-      congruentTrials: 15,
-      incongruentTrials: 25,
-      incongruentErrors: 0,
-      interferenceRtCostMs: 38,
-      trialsAtCurrentDifficulty: 20,
-    });
     const cp60 = flankerCp(60, {
       congruentTrials: 15,
       incongruentTrials: 45,
