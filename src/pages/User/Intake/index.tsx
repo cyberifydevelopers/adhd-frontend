@@ -54,6 +54,68 @@ function YesNoQuestion({
   );
 }
 
+function TodayMedicineSelect({
+  name,
+  strength,
+  formularyItems,
+  onNameChange,
+  onStrengthChange,
+}: {
+  name: string;
+  strength: string;
+  formularyItems: FormularyItem[];
+  onNameChange: (name: string, formulary?: FormularyItem) => void;
+  onStrengthChange: (strength: string) => void;
+}) {
+  const formulary = formularyItems.find((item) => item.name === name);
+  const strengths = formulary?.common_strengths ?? [];
+
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="min-w-[180px] flex-1">
+        <label className="mb-0.5 block text-xs text-muted-foreground">Name</label>
+        <select
+          value={name}
+          onChange={(e) => {
+            const selected = formularyItems.find((item) => item.name === e.target.value);
+            onNameChange(e.target.value, selected);
+          }}
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+        >
+          <option value="">Select medication…</option>
+          {formularyItems.map((f) => (
+            <option key={f.name} value={f.name}>{f.name}</option>
+          ))}
+          {name && !formularyItems.some((f) => f.name === name) && (
+            <option value={name}>{name}</option>
+          )}
+        </select>
+      </div>
+      <div className="w-28">
+        <label className="mb-0.5 block text-xs text-muted-foreground">Strength</label>
+        {strengths.length > 0 ? (
+          <select
+            value={strength}
+            onChange={(e) => onStrengthChange(e.target.value)}
+            className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="">Select…</option>
+            {strengths.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={strength}
+            onChange={(e) => onStrengthChange(e.target.value)}
+            placeholder="Strength"
+            className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MedicationRow({
   entry,
   formularyItems,
@@ -174,16 +236,18 @@ function validateDob(dateOfBirth: string): string | null {
 
 export default function UserIntake() {
   const navigate = useNavigate();
+  const me = useAuthStore((s) => s.me);
+  const isReturning = Boolean(me?.has_intake);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [adhdHistory, setAdhdHistory] = useState<boolean>(false);
   const [medicationStatus, setMedicationStatus] = useState<boolean>(false);
-  const [medicationHistory, setMedicationHistory] = useState<string>("");
   const [medications, setMedications] = useState<MedicationEntry[]>([]);
   const [tookMedicationToday, setTookMedicationToday] = useState<boolean>(false);
   const [medicationTimeTaken, setMedicationTimeTaken] = useState<string>("");
-  const [medicineIntake, setMedicineIntake] = useState<string>("");
+  const [todayMedicineName, setTodayMedicineName] = useState<string>("");
+  const [todayMedicineStrength, setTodayMedicineStrength] = useState<string>("");
   const [formularyItems, setFormularyItems] = useState<FormularyItem[]>([]);
 
   useEffect(() => {
@@ -197,7 +261,6 @@ export default function UserIntake() {
         const id = r.intake_data ?? {};
         setDateOfBirth(String((id.date_of_birth as string) ?? "").slice(0, 10));
         setAdhdHistory(Boolean(id.adhd_history));
-        setMedicationHistory(String((id.medication_history as string) ?? ""));
         setMedicationStatus(Boolean(r.medication_status ?? id.medication_status));
         const meds = r.medications ?? [];
         setMedications(
@@ -208,9 +271,12 @@ export default function UserIntake() {
             quantity: m.quantity != null ? String(m.quantity) : "",
           }))
         );
-        const firstTimeTaken = meds.find((m) => m.time_last_taken)?.time_last_taken ?? null;
+        const todayMed = meds.find((m) => m.time_last_taken);
+        const firstTimeTaken = todayMed?.time_last_taken ?? null;
         setTookMedicationToday(Boolean(firstTimeTaken));
         setMedicationTimeTaken(firstTimeTaken ? new Date(firstTimeTaken).toTimeString().slice(0, 5) : "");
+        setTodayMedicineName(todayMed?.name ?? "");
+        setTodayMedicineStrength(todayMed?.strength ?? "");
       })
       .catch(() => toast.error("Failed to load form"))
       .finally(() => setLoading(false));
@@ -230,12 +296,12 @@ export default function UserIntake() {
       toast.error(dobError);
       return;
     }
-    if (adhdHistory && !medicationHistory.trim()) {
-      toast.error("Please enter your history");
-      return;
-    }
     if (medicationStatus && medications.filter((m) => m.name.trim()).length === 0) {
       toast.error("Please add at least one medication");
+      return;
+    }
+    if (tookMedicationToday && !todayMedicineName.trim()) {
+      toast.error("Please select the medication you took today");
       return;
     }
     setSaving(true);
@@ -243,15 +309,18 @@ export default function UserIntake() {
       await usersMeService.updateIntake({
         date_of_birth: dateOfBirth || undefined,
         adhd_history: adhdHistory,
-        medication_history: adhdHistory ? medicationHistory.trim() : "",
         medication_status: medicationStatus,
-        took_medication_today: false,
+        took_medication_today: tookMedicationToday,
         medications: medicationStatus
           ? medications
               .filter((m) => m.name.trim())
               .map((m) => {
                 let time_last_taken: string | undefined;
-                if (tookMedicationToday && medicationTimeTaken) {
+                const matchesToday =
+                  tookMedicationToday &&
+                  m.name.trim() === todayMedicineName.trim() &&
+                  (!todayMedicineStrength.trim() || m.strength.trim() === todayMedicineStrength.trim());
+                if (matchesToday && medicationTimeTaken) {
                   const today = new Date().toISOString().slice(0, 10);
                   time_last_taken = new Date(`${today}T${medicationTimeTaken}`).toISOString();
                 }
@@ -261,12 +330,11 @@ export default function UserIntake() {
                   form: m.form.trim() || undefined,
                   quantity: m.quantity ? parseInt(m.quantity, 10) : undefined,
                   time_last_taken,
-                  intake_notes: tookMedicationToday && medicineIntake.trim() ? medicineIntake.trim() : undefined,
                 };
               })
           : [],
       });
-      toast.success("Intake saved. You can now complete your assigned tests.");
+      toast.success(isReturning ? "Health information updated." : "Intake saved. You can now complete your assigned tests.");
       await useAuthStore.getState().fetchMe();
       navigate("/user", { replace: true });
     } catch (err: unknown) {
@@ -298,7 +366,9 @@ export default function UserIntake() {
     <DashboardLayout title="Intake">
       <div className="mx-auto max-w-xl space-y-6">
         <p className="text-muted-foreground">
-          Please complete this form before starting your assessments. Your information helps provide accurate results.
+          {isReturning
+            ? "Update your health information below. Changes are saved when you submit the form."
+            : "Please complete this form before starting your assessments. Your information helps provide accurate results."}
         </p>
         <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-border bg-card p-6">
           <div>
@@ -319,20 +389,6 @@ export default function UserIntake() {
             onChange={setAdhdHistory}
           />
 
-          {adhdHistory && (
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                History <span className="text-destructive">*</span>
-              </label>
-              <textarea
-                value={medicationHistory}
-                onChange={(e) => setMedicationHistory(e.target.value)}
-                placeholder="Enter your history"
-                className="min-h-[90px] w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-          )}
-
           <>
             <YesNoQuestion
               label="Are you taking any medications for ADHD?"
@@ -343,7 +399,8 @@ export default function UserIntake() {
                   setMedications([]);
                   setTookMedicationToday(false);
                   setMedicationTimeTaken("");
-                  setMedicineIntake("");
+                  setTodayMedicineName("");
+                  setTodayMedicineStrength("");
                 }
               }}
             />
@@ -377,29 +434,30 @@ export default function UserIntake() {
                       setTookMedicationToday(v);
                       if (!v) {
                         setMedicationTimeTaken("");
-                        setMedicineIntake("");
+                        setTodayMedicineName("");
+                        setTodayMedicineStrength("");
                       }
                     }}
                     label="Did you take any medicine today?"
                   />
                   {tookMedicationToday && (
-                    <div className="flex flex-wrap items-end gap-2">
+                    <div className="space-y-2">
+                      <TodayMedicineSelect
+                        name={todayMedicineName}
+                        strength={todayMedicineStrength}
+                        formularyItems={formularyItems}
+                        onNameChange={(selectedName, selected) => {
+                          setTodayMedicineName(selectedName);
+                          setTodayMedicineStrength(selected?.common_strengths?.[0] ?? "");
+                        }}
+                        onStrengthChange={setTodayMedicineStrength}
+                      />
                       <div className="w-32">
                         <label className="mb-0.5 block text-xs text-muted-foreground">Time taken</label>
                         <input
                           type="time"
                           value={medicationTimeTaken}
                           onChange={(e) => setMedicationTimeTaken(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-                        />
-                      </div>
-                      <div className="min-w-[220px] flex-1">
-                        <label className="mb-0.5 block text-xs text-muted-foreground">Medicine intake</label>
-                        <input
-                          type="text"
-                          value={medicineIntake}
-                          onChange={(e) => setMedicineIntake(e.target.value)}
-                          placeholder="e.g. 1 tablet after breakfast"
                           className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
                         />
                       </div>
@@ -414,7 +472,7 @@ export default function UserIntake() {
             {saving ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
             ) : (
-              <><Save className="h-4 w-4" /> Save and continue</>
+              <><Save className="h-4 w-4" /> {isReturning ? "Save changes" : "Save and continue"}</>
             )}
           </Button>
         </form>

@@ -9,6 +9,7 @@ import {
   Pill,
   Lock,
   LayoutGrid,
+  ClipboardList,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -138,6 +139,13 @@ export default function UserDashboard() {
         >
           <Pill className="h-4 w-4" />
           Medication
+        </Link>
+        <Link
+          to="/user/intake"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+        >
+          <ClipboardList className="h-4 w-4" />
+          Health information
         </Link>
         <button
           type="button"
