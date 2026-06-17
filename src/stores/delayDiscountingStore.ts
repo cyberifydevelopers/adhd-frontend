@@ -99,6 +99,8 @@ type DelayDiscountingState = {
   finishExtension: () => Promise<void>;
   setStimulusOnset: () => void;
   prepareForFreshRun: () => void;
+  cleanup: () => void;
+  resumeAfterPause: () => void;
 };
 
 export const delayDiscountingStore = create<DelayDiscountingState>((set, get) => ({
@@ -487,7 +489,6 @@ export const delayDiscountingStore = create<DelayDiscountingState>((set, get) =>
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     const { _refs } = get();
     _refs.stimulusOnset = 0;
     _refs.blockStart = 0;
@@ -507,4 +508,8 @@ export const delayDiscountingStore = create<DelayDiscountingState>((set, get) =>
       additionalTrials: 0,
     });
   },
+
+  cleanup: () => {},
+
+  resumeAfterPause: () => {},
 }));

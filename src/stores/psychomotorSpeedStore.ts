@@ -465,7 +465,6 @@ export const psychomotorSpeedStore = create<PsychomotorSpeedState>((set, get) =>
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     get().cleanup();
     const { _refs } = get();
     _refs.practiceResults = [];

@@ -9,6 +9,7 @@ import { buildTimeEstimationCheckpointFromEvents } from "@/lib/mainAdaptiveBridg
 import { isTaskPaused } from "@/lib/taskPauseGuard";
 import { ageFromIsoDateOfBirth } from "@/lib/digitSpanSpec";
 import { timeEstimationTargetDurationsMsFromAge } from "@/lib/mainTestAgeDefaults";
+import { apiErrorMessage } from "@/lib/apiErrorMessage";
 
 /** Bounds for random target draw (seconds); younger cohort caps at 10 s. */
 export const TIME_EST_TARGET_DURATIONS_MS = [5000, 10000, 15000] as const;
@@ -411,7 +412,7 @@ export const timeEstimationStore = create<TimeEstimationState>((set, get) => ({
                 });
               }
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Failed to save practice");
+              console.warn("[time_estimation] Practice block save failed (non-blocking):", err);
             }
           })();
           get()._refs.events = snap;
@@ -548,7 +549,7 @@ export const timeEstimationStore = create<TimeEstimationState>((set, get) => ({
       });
       toast.success("Practice started.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start");
+      toast.error(apiErrorMessage(err, "Failed to start"));
     }
   },
 
@@ -616,7 +617,7 @@ export const timeEstimationStore = create<TimeEstimationState>((set, get) => ({
       _refs.events = [];
       toast.success("Results saved.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(apiErrorMessage(err, "Failed to save"));
     }
   },
 
@@ -631,7 +632,7 @@ export const timeEstimationStore = create<TimeEstimationState>((set, get) => ({
       try {
         await sessionsService.postEvents(sessionId, [...eventsToSave]);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to send events");
+        toast.error(apiErrorMessage(err, "Failed to send events"));
       }
     }
     try {
@@ -644,7 +645,7 @@ export const timeEstimationStore = create<TimeEstimationState>((set, get) => ({
       await sessionsService.scoreTimeEstimation(sessionId);
       toast.success("Extension block complete. Results saved.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(apiErrorMessage(err, "Failed to save"));
     }
     _refs.events = [];
     set({ events: [], phase: "complete" });
@@ -656,7 +657,6 @@ export const timeEstimationStore = create<TimeEstimationState>((set, get) => ({
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     const { _refs } = get();
     _refs.startMs = 0;
     _refs.events = [];

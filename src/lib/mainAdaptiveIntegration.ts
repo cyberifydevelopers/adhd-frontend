@@ -2,7 +2,6 @@ import { catStore } from "@/stores/catStore";
 import type { MainAdaptiveTrialTaskKey } from "@/config/catConfig";
 import { stashMainAdaptiveDebugAfterRecord } from "@/lib/mainAdaptiveDebugSnapshot";
 import { mainAdaptiveDebugStore } from "@/stores/mainAdaptiveDebugStore";
-import { taskPauseStore } from "@/stores/taskPauseStore";
 import {
   createAdaptiveHistory,
   evaluateMainAdaptiveCheckpoint,
@@ -107,8 +106,6 @@ export function tryMainAdaptiveStop(
     returnedHistory: nextHistory,
   });
   stashMainAdaptiveDebugAfterRecord(taskKey);
-
-  taskPauseStore.getState().maybeAnnounceMinCheckpointMilestone(taskKey, checkpoint, bounds);
 
   return { history: nextHistory, evaluation };
 }

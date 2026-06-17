@@ -31,7 +31,8 @@ export default function SubstanceDDTask() {
   const sessionId = substanceDDStore((s) => s.sessionId);
   const pendingNextTask = catStore((s) => s.pendingNextTask);
   const choiceEventsCompleted = substanceDDStore((s) => s.events.length);
-  const cleanup = useCallback(() => {}, []);
+  const cleanup = substanceDDStore((s) => s.cleanup);
+  const resumeAfterPause = substanceDDStore((s) => s.resumeAfterPause);
   const { countdown, startCountdown } = useTaskStartCountdown();
   const showMainAdaptivePanel = phase === "running";
   const mainCountdownStarted = useRef(false);
@@ -136,7 +137,7 @@ export default function SubstanceDDTask() {
 
   if (countdown) {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
         <TaskStartCountdown secondsLeft={countdown.secondsLeft} phaseLabel={countdown.phase} />
       </TaskLayout>
     );
@@ -144,7 +145,7 @@ export default function SubstanceDDTask() {
 
   if (isRouting && phase !== "complete") {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
         <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
           <Loader2 className="h-14 w-14 animate-spin text-muted-foreground" aria-hidden />
           <p className="text-muted-foreground">Determining next step...</p>
@@ -155,7 +156,7 @@ export default function SubstanceDDTask() {
 
   if (phase === "instructions") {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
         <div className="mx-auto max-w-2xl space-y-4 rounded-xl border border-border bg-card p-8 shadow-sm">
           <h2 className="text-xl font-semibold">Timing of rewards (neutral)</h2>
           <p className="text-muted-foreground">
@@ -182,7 +183,7 @@ export default function SubstanceDDTask() {
   if ((phase === "practice" || phase === "running") && trials[trialIndex]) {
     const t = trials[trialIndex];
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
         {phase === "practice" && (
           <p className="mb-2 text-center text-sm text-muted-foreground">Practice block</p>
         )}
@@ -228,7 +229,7 @@ export default function SubstanceDDTask() {
 
   if (phase === "complete") {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="substance_dd" showMainAdaptivePanel={showMainAdaptivePanel} title="Substance delay discounting">
         <TaskTransition completedTask="substance_dd" nextTask={pendingNextTask} />
       </TaskLayout>
     );

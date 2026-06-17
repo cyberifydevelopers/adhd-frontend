@@ -30,7 +30,8 @@ export default function DelayDiscountingTask() {
   const setStimulusOnset = delayDiscountingStore((s) => s.setStimulusOnset);
   const sessionId = delayDiscountingStore((s) => s.sessionId);
   const choiceEventsCompleted = delayDiscountingStore((s) => s.events.length);
-  const cleanup = useCallback(() => {}, []);
+  const cleanup = delayDiscountingStore((s) => s.cleanup);
+  const resumeAfterPause = delayDiscountingStore((s) => s.resumeAfterPause);
   const { countdown, startCountdown } = useTaskStartCountdown();
   const showMainAdaptivePanel = phase === "running" || phase === "extension";
   const mainCountdownStarted = useRef(false);
@@ -128,7 +129,7 @@ export default function DelayDiscountingTask() {
 
   if (countdown) {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
         <TaskStartCountdown secondsLeft={countdown.secondsLeft} phaseLabel={countdown.phase} />
       </TaskLayout>
     );
@@ -136,7 +137,7 @@ export default function DelayDiscountingTask() {
 
   if (isRouting && phase !== "complete") {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
         <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
           <Loader2 className="h-14 w-14 animate-spin text-muted-foreground" aria-hidden />
           <p className="text-muted-foreground">Determining next step...</p>
@@ -147,7 +148,7 @@ export default function DelayDiscountingTask() {
 
   if (phase === "instructions") {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
         <DelayDiscountingInstructions onStart={handleStartSession} />
       </TaskLayout>
     );
@@ -155,7 +156,7 @@ export default function DelayDiscountingTask() {
 
   if ((phase === "practice" || phase === "running" || phase === "extension") && trials[trialIndex]) {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
         {phase === "practice" && (
           <p className="mb-2 text-sm text-muted-foreground">Practice block</p>
         )}
@@ -182,7 +183,7 @@ export default function DelayDiscountingTask() {
 
   if (phase === "complete") {
     return (
-      <TaskLayout phase={phase} cleanup={cleanup} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="delay_discounting" showMainAdaptivePanel={showMainAdaptivePanel} title="Delay Discounting">
         <TaskTransition completedTask="delay_discounting" nextTask={pendingNextTask} />
       </TaskLayout>
     );

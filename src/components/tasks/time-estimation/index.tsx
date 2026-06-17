@@ -54,24 +54,11 @@ export default function TimeEstimationTask() {
   }, []);
   const { countdown, startCountdown } = useTaskStartCountdown();
   const showMainAdaptivePanel = phase === "running" || phase === "extension";
-  const mainCountdownStarted = useRef(false);
   const handleStartSession = useCallback(() => {
     startCountdown("practice", () => {
       return startSession();
     });
   }, [startSession, startCountdown]);
-
-  useEffect(() => {
-    if (phase === "instructions") {
-      mainCountdownStarted.current = false;
-      return;
-    }
-    if (phase === "running" && !mainCountdownStarted.current) {
-      mainCountdownStarted.current = true;
-      startCountdown("main", () => {});
-    }
-  }, [phase, startCountdown]);
-
 
   const navigate = useNavigate();
   const isRouting = catStore((s) => s.isRouting);
@@ -190,7 +177,6 @@ export default function TimeEstimationTask() {
     if (phase !== "practice_wrapup") return;
     const id = window.setTimeout(() => {
       startCountdown("main", () => {
-        mainCountdownStarted.current = true;
         timeEstimationStore.getState().beginMainAfterPracticeWrapup();
       });
     }, FEEDBACK_SETTLE_MS);

@@ -833,19 +833,6 @@ export const taskSwitchingStore = create<TaskSwitchingState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
-    const completed = Math.max(1, _refs.events.length);
-    const correct = _refs.events.filter((ev) => ev.is_correct === true).length;
-    const accuracy = correct / completed;
-    if (accuracy < 0.8) {
-      if (accuracy < 0.5) {
-        set({ phase: "instructions", mainReinstruction: false, practiceReinstruction: true });
-        toast.error("Main accuracy below 50%. Instructions shown again before practice.");
-      } else {
-        get().resumePractice();
-        toast.info("Main accuracy between 50% and 79%. Returning to practice.");
-      }
-      return false;
-    }
     try {
       if (_refs.events.length > 0) {
         await sessionsService.postEvents(sessionId, [..._refs.events]);
@@ -917,7 +904,6 @@ export const taskSwitchingStore = create<TaskSwitchingState>((set, get) => ({
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     _prevTask = Math.random() < 0.5 ? "letter" : "number";
     get().cleanup();
     const { _refs } = get();

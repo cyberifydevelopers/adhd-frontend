@@ -774,7 +774,6 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     get().cleanup();
     const { _refs } = get();
     _refs.stimulusOnset = 0;

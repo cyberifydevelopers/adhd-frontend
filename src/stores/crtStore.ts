@@ -616,21 +616,8 @@ export const crtStore = create<CRTState>((set, get) => ({
       return false;
     }
     const n = _refs.events.length;
-    const correct = _refs.events.filter((ev) => ev.is_correct === true).length;
-    /** Spec: accuracy over completed scored trials — not `correct / maxTrials` (early adaptive stop would read as ~50% for 40/80). */
-    const accuracy = n > 0 ? correct / n : 0;
     if (n === 0) {
       set({ phase: "complete", mainReinstruction: false });
-      return false;
-    }
-    if (accuracy < 0.7) {
-      if (accuracy < 0.5) {
-        set({ phase: "instructions", mainReinstruction: false, practiceReinstruction: true });
-        toast.error("Main accuracy below 50%. Instructions shown again before practice.");
-      } else {
-        get().resumePractice();
-        toast.info("Main accuracy between 50% and 69%. Returning to practice.");
-      }
       return false;
     }
     try {
@@ -704,7 +691,6 @@ export const crtStore = create<CRTState>((set, get) => ({
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     get().cleanup();
     const { _refs } = get();
     _refs.stimulusOnset = 0;

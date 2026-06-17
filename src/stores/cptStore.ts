@@ -800,22 +800,7 @@ export const cptStore = create<CPTState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
-    const completed = Math.max(1, _refs.events.length);
-    const correct = _refs.events.filter((ev) => ev.is_correct === true).length;
-    /** Accuracy over trials completed — not session max (early adaptive stop would read falsely ~50%). */
-    const accuracy = correct / completed;
-    /** Wilson CI + stability gates already passed before main_adaptive_stop; do not re-gate on cumulative accuracy. */
     const adaptiveStop = catStore.getState().blockEndTriggerReason === "main_adaptive_stop";
-    if (!adaptiveStop && accuracy < 0.8) {
-      if (accuracy < 0.5) {
-        set({ phase: "instructions", mainReinstruction: false, practiceReinstruction: true });
-        toast.error("Main accuracy below 50%. Instructions shown again before practice.");
-      } else {
-        get().resumePractice();
-        toast.info("Main accuracy between 50% and 79%. Returning to practice.");
-      }
-      return false;
-    }
 
     if (_refs.events.length > 0) {
       try {
@@ -968,7 +953,6 @@ export const cptStore = create<CPTState>((set, get) => ({
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     get().cleanup();
     const { _refs } = get();
     _refs.blockStart = 0;

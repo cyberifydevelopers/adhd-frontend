@@ -97,6 +97,8 @@ type SubstanceDDState = {
   setStimulusOnset: () => void;
   prepareForFreshRun: () => void;
   markDistress: () => void;
+  cleanup: () => void;
+  resumeAfterPause: () => void;
 };
 
 export const substanceDDStore = create<SubstanceDDState>((set, get) => ({
@@ -428,7 +430,6 @@ export const substanceDDStore = create<SubstanceDDState>((set, get) => ({
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     const { _refs } = get();
     _refs.stimulusOnset = 0;
     _refs.blockStart = 0;
@@ -449,4 +450,8 @@ export const substanceDDStore = create<SubstanceDDState>((set, get) => ({
       events: [],
     });
   },
+
+  cleanup: () => {},
+
+  resumeAfterPause: () => {},
 }));

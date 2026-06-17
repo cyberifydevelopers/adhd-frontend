@@ -780,7 +780,6 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     get().cleanup();
     const { _refs } = get();
     _refs.events = [];

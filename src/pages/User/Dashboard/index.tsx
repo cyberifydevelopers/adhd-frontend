@@ -44,19 +44,18 @@ const statusIcons: Record<string, typeof CheckCircle2> = {
   upcoming: Clock,
 };
 
-function normalizeStatus(status: string): string {
-  return status === "in_progress" ? "pending" : status;
-}
-
 function buildAssignmentKey(assignment: Assignment, index: number): string {
   return assignment.assignment_id ?? `${assignment.test_name}-${index}`;
 }
 
 function getAssignmentStatusMeta(status: string) {
-  const normalizedStatus = normalizeStatus(status);
+  const normalizedStatus = status;
+  const canContinue = normalizedStatus === "in_progress";
+  const canStart = normalizedStatus === "pending" || canContinue;
   return {
     normalizedStatus,
-    canStart: normalizedStatus === "pending",
+    canStart,
+    canContinue,
     StatusIcon: statusIcons[normalizedStatus] ?? CircleDashed,
     statusBadgeClassName: statusStyles[normalizedStatus] ?? statusStyles.pending,
     statusBorderClassName: statusBorders[normalizedStatus] ?? statusBorders.pending,
@@ -282,6 +281,7 @@ export default function UserDashboard() {
                     const {
                       normalizedStatus,
                       canStart,
+                      canContinue,
                       StatusIcon,
                       statusBadgeClassName,
                       statusBorderClassName,
@@ -298,7 +298,11 @@ export default function UserDashboard() {
                         <div className="flex items-center gap-2">
                           <span className={`inline-flex w-fit items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${statusBadgeClassName}`}>
                             <StatusIcon className="h-3 w-3" />
-                            {normalizedStatus === "upcoming" ? "Upcoming task" : normalizedStatus}
+                            {normalizedStatus === "upcoming"
+                              ? "Upcoming task"
+                              : normalizedStatus === "in_progress"
+                                ? "In progress"
+                                : normalizedStatus}
                           </span>
                           {canStart && taskPath && (
                             <Link
@@ -306,7 +310,7 @@ export default function UserDashboard() {
                               className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-sm shadow-primary/20 transition-all duration-200 hover:shadow-md hover:shadow-primary/30 hover:-translate-y-0.5"
                             >
                               <Play className="h-3 w-3" />
-                              Start
+                              {canContinue ? "Continue" : "Start"}
                             </Link>
                           )}
                           {canStart && !taskPath && (

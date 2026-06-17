@@ -16,10 +16,9 @@ export function isPausableTaskPhase(phase: string | undefined): boolean {
   return !NON_PAUSABLE_PHASES.has(phase);
 }
 
-/** Exit confirm or checkpoint milestone dialog is open. */
+/** Exit confirm dialog is open. */
 export function isSessionDialogOpen(): boolean {
-  const s = taskPauseStore.getState();
-  return s.exitDialogOpen || (s.checkpointMilestone?.open ?? false);
+  return taskPauseStore.getState().exitDialogOpen;
 }
 
 const ACTIVE_RT_PHASES = new Set(["practice", "main", "extension"]);

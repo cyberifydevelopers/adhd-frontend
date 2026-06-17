@@ -35,7 +35,6 @@ const SSD_STEP_MS = 50;
 /** Staircase clamp — spec 50–900 ms (same symbols as mainAdaptiveBridge SST_SSD_SPEC_*). */
 const SSD_MIN_MS = SST_SSD_SPEC_MIN_MS;
 const SSD_MAX_MS = SST_SSD_SPEC_MAX_MS;
-const STUCK_THRESHOLD = 5;
 
 function randomDirection(): "left" | "right" {
   return Math.random() < 0.5 ? "left" : "right";
@@ -146,7 +145,6 @@ type SSTState = {
   finishPractice: () => void;
   finishMain: () => Promise<boolean>;
   finishExtension: () => Promise<void>;
-  getSsdStuckMessage: () => string | null;
   cleanup: () => void;
   resumeAfterPause: () => void;
   /** Reset after a terminal completion so a new assignment/battery session can start (in-memory store otherwise stays on `complete`). */
@@ -748,20 +746,6 @@ export const sstStore = create<SSTState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
-    const goEvents = _refs.events.filter((ev) => ev.event_type === "go");
-    const goCompleted = goEvents.length;
-    const correct = goEvents.filter((ev) => ev.is_correct === true).length;
-    const accuracy = goCompleted > 0 ? correct / goCompleted : 0;
-    if (accuracy < 0.8) {
-      if (accuracy < 0.5) {
-        set({ phase: "instructions", mainReinstruction: false, practiceReinstruction: true });
-        toast.error("Main accuracy below 50%. Instructions shown again before practice.");
-      } else {
-        get().resumePractice();
-        toast.info("Main accuracy between 50% and 79%. Returning to practice.");
-      }
-      return false;
-    }
     if (_refs.events.length > 0) {
       try {
         await sessionsService.postEvents(sessionId, [..._refs.events]);
@@ -826,29 +810,6 @@ export const sstStore = create<SSTState>((set, get) => ({
     set({ events: [], phase: "complete" });
   },
 
-  getSsdStuckMessage: () => {
-    const { events } = get();
-    const stopTrialsSsd = events
-      .filter((e: Record<string, unknown>) => e.event_type === "stop" && e.isi_ms != null)
-      .map((e) => e.isi_ms as number);
-    if (stopTrialsSsd.length < STUCK_THRESHOLD) return null;
-    let floorRun = 0;
-    let ceilingRun = 0;
-    for (let i = 0; i < stopTrialsSsd.length; i++) {
-      if (stopTrialsSsd[i] <= SSD_MIN_MS) {
-        floorRun = i > 0 && stopTrialsSsd[i - 1] <= SSD_MIN_MS ? floorRun + 1 : 1;
-        if (floorRun >= STUCK_THRESHOLD) return "SSD stuck at floor (≤50ms) — staircase may not have converged";
-      } else floorRun = 0;
-    }
-    for (let i = 0; i < stopTrialsSsd.length; i++) {
-      if (stopTrialsSsd[i] >= SSD_MAX_MS) {
-        ceilingRun = i > 0 && stopTrialsSsd[i - 1] >= SSD_MAX_MS ? ceilingRun + 1 : 1;
-        if (ceilingRun >= STUCK_THRESHOLD) return `SSD stuck at ceiling (≥${SSD_MAX_MS}ms) — staircase may not have converged`;
-      } else ceilingRun = 0;
-    }
-    return null;
-  },
-
   cleanup: () => {
     const { _refs } = get();
     if (_refs.keydownHandler) {
@@ -878,7 +839,6 @@ export const sstStore = create<SSTState>((set, get) => ({
   },
 
   prepareForFreshRun: () => {
-    if (get().phase !== "complete") return;
     get().cleanup();
     const { _refs } = get();
     _refs.blockStart = 0;

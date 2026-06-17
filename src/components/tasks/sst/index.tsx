@@ -52,7 +52,6 @@ export default function StopSignalTask() {
   const resumeAfterPause = sstStore((s) => s.resumeAfterPause);
   const isPaused = taskPauseStore((s) => s.isPaused);
   const sessionId = sstStore((s) => s.sessionId);
-  const ssdStuckMessage = sstStore((s) => s.getSsdStuckMessage());
   const { countdown, startCountdown } = useTaskStartCountdown();
   const showMainAdaptivePanel = phase === "main" || phase === "extension";
   const mainCountdownStarted = useRef(false);
@@ -207,11 +206,6 @@ export default function StopSignalTask() {
     const feedbackKey = phase === "practice" ? practiceFeedbackKey : mainFeedbackKey;
     return (
       <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="sst" showMainAdaptivePanel={showMainAdaptivePanel} title="SST">
-        {ssdStuckMessage && (
-          <div className="mb-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-            {ssdStuckMessage}
-          </div>
-        )}
         {phase === "extension" && (
           <p className="mb-2 text-sm text-amber-600">Extension block — additional trials</p>
         )}
