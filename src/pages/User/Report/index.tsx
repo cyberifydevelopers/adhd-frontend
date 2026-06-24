@@ -1349,43 +1349,45 @@ export default function UserReport() {
         </div>
 
         {/* Top summary card */}
-        <div
-          className={`rounded-xl border p-5 shadow-sm animate-fade-in ${
-            topSummary.tone === "strong"
-              ? "border-rose-500/50 bg-gradient-to-r from-rose-500/10 via-card to-rose-500/5"
-              : topSummary.tone === "caution"
-                ? "border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-card to-amber-500/5"
-                : "border-emerald-500/50 bg-gradient-to-r from-emerald-500/10 via-card to-emerald-500/5"
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            <div
-              className={`mt-0.5 rounded-lg p-2 ${
-                topSummary.tone === "strong"
-                  ? "bg-rose-500/15 text-rose-700 dark:text-rose-400"
-                  : topSummary.tone === "caution"
-                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                    : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-              }`}
-            >
-              {topSummary.tone === "strong" ? (
-                <AlertTriangle className="h-5 w-5" />
-              ) : topSummary.tone === "caution" ? (
-                <Brain className="h-5 w-5" />
-              ) : (
-                <ShieldCheck className="h-5 w-5" />
-              )}
-            </div>
-            <div className="space-y-1">
-              <p className="text-lg font-semibold text-foreground">
-                {topSummary.title}
-              </p>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {topSummary.message}
-              </p>
+        {results.length > 0 && (
+          <div
+            className={`rounded-xl border p-5 shadow-sm animate-fade-in ${
+              topSummary.tone === "strong"
+                ? "border-rose-500/50 bg-gradient-to-r from-rose-500/10 via-card to-rose-500/5"
+                : topSummary.tone === "caution"
+                  ? "border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-card to-amber-500/5"
+                  : "border-emerald-500/50 bg-gradient-to-r from-emerald-500/10 via-card to-emerald-500/5"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`mt-0.5 rounded-lg p-2 ${
+                  topSummary.tone === "strong"
+                    ? "bg-rose-500/15 text-rose-700 dark:text-rose-400"
+                    : topSummary.tone === "caution"
+                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                      : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                }`}
+              >
+                {topSummary.tone === "strong" ? (
+                  <AlertTriangle className="h-5 w-5" />
+                ) : topSummary.tone === "caution" ? (
+                  <Brain className="h-5 w-5" />
+                ) : (
+                  <ShieldCheck className="h-5 w-5" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-foreground">
+                  {topSummary.title}
+                </p>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {topSummary.message}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Tab bar */}
         <div className="flex flex-wrap items-center gap-2">

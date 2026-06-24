@@ -178,6 +178,10 @@ export function evaluatePracticeBlock(
     lastN.length > 0 ? lastN.filter((e) => e.isCorrect).length / lastN.length : 0;
 
   if (totalTrialsCompleted >= config.maxTrials) {
+    const overallAccuracy = totalTrialsCompleted > 0 ? state.overallCorrect / totalTrialsCompleted : 0;
+    if (overallAccuracy < config.continueThreshold || state.overallCorrect === 0) {
+      return { action: "reinstructions", level: "simplified" };
+    }
     return {
       action: "proceed_to_main",
       passed: false,
@@ -324,6 +328,15 @@ export function recordSSTTrial(
 
 export function evaluateSSTBlock(state: PracticeState, config: PracticeConfig): SSTPracticeEvaluation {
   if (state.totalTrialsCompleted >= config.maxTrials) {
+    const goAccuracy = state.sstGoTrials > 0 ? state.sstGoCorrect / state.sstGoTrials : 0;
+    if (goAccuracy < config.continueThreshold || state.sstGoCorrect === 0) {
+      return {
+        action: "reinstructions",
+        level: "additional",
+        hint: "Respond quickly on GO trials, and stop when you see the stop signal",
+        state: { ...state, practiceErrorPattern: "accuracy_low" },
+      };
+    }
     return {
       action: "proceed_to_main",
       passed: false,

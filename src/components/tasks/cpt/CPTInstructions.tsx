@@ -9,6 +9,7 @@ type Props = {
 };
 
 export function CPTInstructions({ onStart, isReinstruction, reinstructionLevel, reinstructionHint }: Props) {
+  const isAdditional = isReinstruction && reinstructionLevel === "additional";
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="rounded-xl border border-border bg-card p-8 shadow-sm space-y-6">
@@ -23,14 +24,18 @@ export function CPTInstructions({ onStart, isReinstruction, reinstructionLevel, 
         {isReinstruction && reinstructionHint && (
           <p className="text-sm text-muted-foreground">{reinstructionHint}</p>
         )}
-        <p className="text-muted-foreground">
-          Press the <kbd className="rounded border bg-muted px-1.5 py-0.5">Space</kbd> key only when you see the letter{" "}
-          <strong>X</strong>. Do not press for any other letter.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          You will do a short practice first, then the main task. Stay focused and respond as quickly and accurately as
-          you can.
-        </p>
+        {!isAdditional && (
+          <>
+            <p className="text-muted-foreground">
+              Press the <kbd className="rounded border bg-muted px-1.5 py-0.5">Space</kbd> key only when you see the letter{" "}
+              <strong>X</strong>. Do not press for any other letter.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              You will do a short practice first, then the main task. Stay focused and respond as quickly and accurately as
+              you can.
+            </p>
+          </>
+        )}
         <Button onClick={onStart} variant="outline" size="lg">
           {isReinstruction ? "Resume practice" : "Start practice"}
         </Button>

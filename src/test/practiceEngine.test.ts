@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   evaluatePracticeBlock,
+  evaluateSSTBlock,
   type PracticeConfig,
   type PracticeEvent,
   type PracticeState,
@@ -119,5 +120,73 @@ describe("practiceEngine evaluatePracticeBlock", () => {
       passed: false,
       lowConfidence: true,
     });
+  });
+
+  it("restarts practice (simplified reinstructions) at max trials if overall accuracy is below continue threshold", () => {
+    const state = makeState({
+      totalTrialsCompleted: 20,
+      overallCorrect: 9, // 45% < 50%
+      currentBlockTrials: 5,
+    });
+
+    const decision = evaluatePracticeBlock(state, baseConfig);
+    expect(decision).toEqual({
+      action: "reinstructions",
+      level: "simplified",
+    });
+  });
+
+  it("restarts practice (simplified reinstructions) at max trials if overall correct is 0", () => {
+    const state = makeState({
+      totalTrialsCompleted: 20,
+      overallCorrect: 0,
+      currentBlockTrials: 5,
+    });
+
+    const decision = evaluatePracticeBlock(state, baseConfig);
+    expect(decision).toEqual({
+      action: "reinstructions",
+      level: "simplified",
+    });
+  });
+});
+
+describe("practiceEngine evaluateSSTBlock", () => {
+  it("proceeds to main with low confidence at max trials if go accuracy is above continue threshold", () => {
+    const state = makeState({
+      totalTrialsCompleted: 20,
+      sstGoTrials: 10,
+      sstGoCorrect: 6, // 60% > 50%
+    });
+
+    const decision = evaluateSSTBlock(state, baseConfig);
+    expect(decision.action).toBe("proceed_to_main");
+    expect(decision.passed).toBe(false);
+    expect(decision.lowConfidence).toBe(true);
+  });
+
+  it("restarts practice (reinstructions additional) at max trials if go accuracy is below continue threshold", () => {
+    const state = makeState({
+      totalTrialsCompleted: 20,
+      sstGoTrials: 10,
+      sstGoCorrect: 4, // 40% < 50%
+    });
+
+    const decision = evaluateSSTBlock(state, baseConfig);
+    expect(decision.action).toBe("reinstructions");
+    expect(decision.level).toBe("additional");
+    expect(decision.hint).toContain("Respond quickly on GO trials");
+  });
+
+  it("restarts practice (reinstructions additional) at max trials if sstGoCorrect is 0", () => {
+    const state = makeState({
+      totalTrialsCompleted: 20,
+      sstGoTrials: 10,
+      sstGoCorrect: 0,
+    });
+
+    const decision = evaluateSSTBlock(state, baseConfig);
+    expect(decision.action).toBe("reinstructions");
+    expect(decision.level).toBe("additional");
   });
 });

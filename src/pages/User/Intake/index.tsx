@@ -18,6 +18,14 @@ type MedicationEntry = {
   _formulary?: FormularyItem;
 };
 
+type TodayMedicationEntry = {
+  name: string;
+  strength: string;
+  quantity: string;
+  timeTaken: string;
+  _formulary?: FormularyItem;
+};
+
 function YesNoQuestion({
   label,
   value,
@@ -54,40 +62,54 @@ function YesNoQuestion({
   );
 }
 
-function TodayMedicineSelect({
-  name,
-  strength,
+function TodayMedicationRow({
+  entry,
   formularyItems,
-  onNameChange,
-  onStrengthChange,
+  onChange,
+  onRemove,
 }: {
-  name: string;
-  strength: string;
+  entry: TodayMedicationEntry;
   formularyItems: FormularyItem[];
-  onNameChange: (name: string, formulary?: FormularyItem) => void;
-  onStrengthChange: (strength: string) => void;
+  onChange: (e: TodayMedicationEntry) => void;
+  onRemove: () => void;
 }) {
-  const formulary = formularyItems.find((item) => item.name === name);
+  const selectMedication = (name: string) => {
+    const selected = formularyItems.find((item) => item.name === name);
+    if (!selected) {
+      onChange({
+        ...entry,
+        name,
+        _formulary: undefined,
+      });
+      return;
+    }
+
+    onChange({
+      ...entry,
+      name: selected.name,
+      strength: selected.common_strengths?.[0] ?? "",
+      _formulary: selected,
+    });
+  };
+
+  const formulary = entry._formulary;
   const strengths = formulary?.common_strengths ?? [];
 
   return (
-    <div className="flex flex-wrap items-end gap-2">
+    <div className="relative flex flex-nowrap items-end gap-2 overflow-x-auto rounded-lg border border-border/60 bg-muted/20 p-2">
       <div className="min-w-[180px] flex-1">
         <label className="mb-0.5 block text-xs text-muted-foreground">Name</label>
         <select
-          value={name}
-          onChange={(e) => {
-            const selected = formularyItems.find((item) => item.name === e.target.value);
-            onNameChange(e.target.value, selected);
-          }}
+          value={entry.name}
+          onChange={(e) => selectMedication(e.target.value)}
           className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
         >
           <option value="">Select medication…</option>
           {formularyItems.map((f) => (
             <option key={f.name} value={f.name}>{f.name}</option>
           ))}
-          {name && !formularyItems.some((f) => f.name === name) && (
-            <option value={name}>{name}</option>
+          {entry.name && !formularyItems.some((f) => f.name === entry.name) && (
+            <option value={entry.name}>{entry.name}</option>
           )}
         </select>
       </div>
@@ -95,8 +117,8 @@ function TodayMedicineSelect({
         <label className="mb-0.5 block text-xs text-muted-foreground">Strength</label>
         {strengths.length > 0 ? (
           <select
-            value={strength}
-            onChange={(e) => onStrengthChange(e.target.value)}
+            value={entry.strength}
+            onChange={(e) => onChange({ ...entry, strength: e.target.value })}
             className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
           >
             <option value="">Select…</option>
@@ -105,13 +127,36 @@ function TodayMedicineSelect({
         ) : (
           <input
             type="text"
-            value={strength}
-            onChange={(e) => onStrengthChange(e.target.value)}
+            value={entry.strength}
+            onChange={(e) => onChange({ ...entry, strength: e.target.value })}
             placeholder="Strength"
             className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
           />
         )}
       </div>
+      <div className="w-20">
+        <label className="mb-0.5 block text-xs text-muted-foreground">Quantity</label>
+        <input
+          type="number"
+          min={1}
+          value={entry.quantity}
+          onChange={(e) => onChange({ ...entry, quantity: e.target.value })}
+          placeholder="Qty"
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+        />
+      </div>
+      <div className="w-28">
+        <label className="mb-0.5 block text-xs text-muted-foreground">Time taken</label>
+        <input
+          type="time"
+          value={entry.timeTaken}
+          onChange={(e) => onChange({ ...entry, timeTaken: e.target.value })}
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+        />
+      </div>
+      <Button size="sm" variant="ghost" onClick={onRemove} className="shrink-0 inline-flex items-center gap-1 text-destructive">
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
@@ -245,41 +290,60 @@ export default function UserIntake() {
   const [medicationStatus, setMedicationStatus] = useState<boolean>(false);
   const [medications, setMedications] = useState<MedicationEntry[]>([]);
   const [tookMedicationToday, setTookMedicationToday] = useState<boolean>(false);
-  const [medicationTimeTaken, setMedicationTimeTaken] = useState<string>("");
-  const [todayMedicineName, setTodayMedicineName] = useState<string>("");
-  const [todayMedicineStrength, setTodayMedicineStrength] = useState<string>("");
+  const [todayMedications, setTodayMedications] = useState<TodayMedicationEntry[]>([]);
   const [formularyItems, setFormularyItems] = useState<FormularyItem[]>([]);
 
   useEffect(() => {
-    usersMeService.getFormulary("", 100).then((data) => setFormularyItems(data.items ?? [])).catch(() => setFormularyItems([]));
-  }, []);
+    const fetchData = async () => {
+      try {
+        const formularyData = await usersMeService.getFormulary("", 100);
+        const fItems = formularyData.items ?? [];
+        setFormularyItems(fItems);
 
-  useEffect(() => {
-    usersMeService
-      .getIntake()
-      .then((r) => {
+        const r = await usersMeService.getIntake();
         const id = r.intake_data ?? {};
         setDateOfBirth(String((id.date_of_birth as string) ?? "").slice(0, 10));
         setAdhdHistory(Boolean(id.adhd_history));
         setMedicationStatus(Boolean(r.medication_status ?? id.medication_status));
+        
         const meds = r.medications ?? [];
-        setMedications(
-          meds.map((m) => ({
+        
+        // Match formulary items for regular medications to populate strength dropdowns
+        const mappedMeds = meds.map((m) => {
+          const matched = fItems.find((f) => f.name === m.name);
+          return {
             name: m.name,
             strength: m.strength ?? "",
             form: m.form ?? "",
             quantity: m.quantity != null ? String(m.quantity) : "",
-          }))
-        );
-        const todayMed = meds.find((m) => m.time_last_taken);
-        const firstTimeTaken = todayMed?.time_last_taken ?? null;
-        setTookMedicationToday(Boolean(firstTimeTaken));
-        setMedicationTimeTaken(firstTimeTaken ? new Date(firstTimeTaken).toTimeString().slice(0, 5) : "");
-        setTodayMedicineName(todayMed?.name ?? "");
-        setTodayMedicineStrength(todayMed?.strength ?? "");
-      })
-      .catch(() => toast.error("Failed to load form"))
-      .finally(() => setLoading(false));
+            _formulary: matched,
+          };
+        });
+        setMedications(mappedMeds);
+
+        // Filter/find medications taken today (time_last_taken is set)
+        const todayMeds = meds.filter((m) => m.time_last_taken);
+        setTookMedicationToday(Boolean(r.took_medication_today ?? id.took_medication_today ?? todayMeds.length > 0));
+        
+        const mappedTodayMeds: TodayMedicationEntry[] = todayMeds.map((m) => {
+          const matched = fItems.find((f) => f.name === m.name);
+          return {
+            name: m.name,
+            strength: m.strength ?? "",
+            quantity: m.quantity != null ? String(m.quantity) : "1",
+            timeTaken: m.time_last_taken ? new Date(m.time_last_taken).toTimeString().slice(0, 5) : "",
+            _formulary: matched,
+          };
+        });
+        setTodayMedications(mappedTodayMeds);
+        
+      } catch (err) {
+        toast.error("Failed to load form");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   const addMedication = () =>
@@ -288,6 +352,13 @@ export default function UserIntake() {
     setMedications((m) => m.map((x, j) => (j === i ? entry : x)));
   const removeMedication = (i: number) =>
     setMedications((m) => m.filter((_, j) => j !== i));
+
+  const addTodayMedication = () =>
+    setTodayMedications((m) => [...m, { name: "", strength: "", quantity: "1", timeTaken: "" }]);
+  const updateTodayMedication = (i: number, entry: TodayMedicationEntry) =>
+    setTodayMedications((m) => m.map((x, j) => (j === i ? entry : x)));
+  const removeTodayMedication = (i: number) =>
+    setTodayMedications((m) => m.filter((_, j) => j !== i));
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -300,39 +371,95 @@ export default function UserIntake() {
       toast.error("Please add at least one medication");
       return;
     }
-    if (tookMedicationToday && !todayMedicineName.trim()) {
-      toast.error("Please select the medication you took today");
-      return;
+    if (tookMedicationToday) {
+      if (todayMedications.length === 0) {
+        toast.error("Please add at least one medication you took today");
+        return;
+      }
+      for (let i = 0; i < todayMedications.length; i++) {
+        if (!todayMedications[i].name.trim()) {
+          toast.error(`Please select the name for medication taken today (row ${i + 1})`);
+          return;
+        }
+        if (!todayMedications[i].timeTaken) {
+          toast.error(`Please specify the time taken for ${todayMedications[i].name}`);
+          return;
+        }
+      }
     }
+
     setSaving(true);
     try {
+      const finalMeds = [];
+      const processedTodayMeds = new Set<number>();
+
+      if (medicationStatus) {
+        // 1. Process regular medications and check if any were taken today
+        for (const m of medications) {
+          if (!m.name.trim()) continue;
+
+          let time_last_taken: string | undefined;
+          let qty = m.quantity ? parseInt(m.quantity, 10) : undefined;
+
+          if (tookMedicationToday) {
+            const todayIdx = todayMedications.findIndex(
+              (tm, index) =>
+                !processedTodayMeds.has(index) &&
+                tm.name.trim().toLowerCase() === m.name.trim().toLowerCase() &&
+                (!tm.strength.trim() || tm.strength.trim().toLowerCase() === m.strength.trim().toLowerCase())
+            );
+            if (todayIdx !== -1) {
+              processedTodayMeds.add(todayIdx);
+              const tm = todayMedications[todayIdx];
+              if (tm.timeTaken) {
+                const today = new Date().toISOString().slice(0, 10);
+                time_last_taken = new Date(`${today}T${tm.timeTaken}`).toISOString();
+              }
+              if (tm.quantity) {
+                qty = parseInt(tm.quantity, 10);
+              }
+            }
+          }
+
+          finalMeds.push({
+            name: m.name.trim(),
+            strength: m.strength.trim() || undefined,
+            form: m.form.trim() || undefined,
+            quantity: qty,
+            time_last_taken,
+          });
+        }
+
+        // 2. Any todayMedications that did not match a regular medication should be added
+        if (tookMedicationToday) {
+          for (let i = 0; i < todayMedications.length; i++) {
+            if (processedTodayMeds.has(i)) continue;
+            const tm = todayMedications[i];
+            if (!tm.name.trim()) continue;
+
+            let time_last_taken: string | undefined;
+            if (tm.timeTaken) {
+              const today = new Date().toISOString().slice(0, 10);
+              time_last_taken = new Date(`${today}T${tm.timeTaken}`).toISOString();
+            }
+
+            finalMeds.push({
+              name: tm.name.trim(),
+              strength: tm.strength.trim() || undefined,
+              form: "Tablet", // default form
+              quantity: tm.quantity ? parseInt(tm.quantity, 10) : 1,
+              time_last_taken,
+            });
+          }
+        }
+      }
+
       await usersMeService.updateIntake({
         date_of_birth: dateOfBirth || undefined,
         adhd_history: adhdHistory,
         medication_status: medicationStatus,
         took_medication_today: tookMedicationToday,
-        medications: medicationStatus
-          ? medications
-              .filter((m) => m.name.trim())
-              .map((m) => {
-                let time_last_taken: string | undefined;
-                const matchesToday =
-                  tookMedicationToday &&
-                  m.name.trim() === todayMedicineName.trim() &&
-                  (!todayMedicineStrength.trim() || m.strength.trim() === todayMedicineStrength.trim());
-                if (matchesToday && medicationTimeTaken) {
-                  const today = new Date().toISOString().slice(0, 10);
-                  time_last_taken = new Date(`${today}T${medicationTimeTaken}`).toISOString();
-                }
-                return {
-                  name: m.name.trim(),
-                  strength: m.strength.trim() || undefined,
-                  form: m.form.trim() || undefined,
-                  quantity: m.quantity ? parseInt(m.quantity, 10) : undefined,
-                  time_last_taken,
-                };
-              })
-          : [],
+        medications: finalMeds,
       });
       toast.success(isReturning ? "Health information updated." : "Intake saved. You can now complete your assigned tests.");
       await useAuthStore.getState().fetchMe();
@@ -427,39 +554,46 @@ export default function UserIntake() {
                     <p className="text-sm text-muted-foreground">No medications added. Click to add.</p>
                   )}
                 </div>
-                <div className="mt-3 space-y-2 rounded-lg border border-border/60 bg-background/60 p-3">
+                <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-background/60 p-3">
                   <ToggleSwitch
                     checked={tookMedicationToday}
                     onCheckedChange={(v) => {
                       setTookMedicationToday(v);
                       if (!v) {
-                        setMedicationTimeTaken("");
-                        setTodayMedicineName("");
-                        setTodayMedicineStrength("");
+                        setTodayMedications([]);
+                      } else if (todayMedications.length === 0) {
+                        setTodayMedications([{ name: "", strength: "", quantity: "1", timeTaken: "" }]);
                       }
                     }}
                     label="Did you take any medicine today?"
                   />
                   {tookMedicationToday && (
                     <div className="space-y-2">
-                      <TodayMedicineSelect
-                        name={todayMedicineName}
-                        strength={todayMedicineStrength}
-                        formularyItems={formularyItems}
-                        onNameChange={(selectedName, selected) => {
-                          setTodayMedicineName(selectedName);
-                          setTodayMedicineStrength(selected?.common_strengths?.[0] ?? "");
-                        }}
-                        onStrengthChange={setTodayMedicineStrength}
-                      />
-                      <div className="w-32">
-                        <label className="mb-0.5 block text-xs text-muted-foreground">Time taken</label>
-                        <input
-                          type="time"
-                          value={medicationTimeTaken}
-                          onChange={(e) => setMedicationTimeTaken(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-                        />
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold text-muted-foreground">Medications Taken Today</label>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="inline-flex items-center gap-1 text-xs"
+                          onClick={addTodayMedication}
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add medication
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        {todayMedications.map((m, i) => (
+                          <TodayMedicationRow
+                            key={i}
+                            entry={m}
+                            formularyItems={formularyItems}
+                            onChange={(e) => updateTodayMedication(i, e)}
+                            onRemove={() => removeTodayMedication(i)}
+                          />
+                        ))}
+                        {todayMedications.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No medications added. Click to add.</p>
+                        )}
                       </div>
                     </div>
                   )}

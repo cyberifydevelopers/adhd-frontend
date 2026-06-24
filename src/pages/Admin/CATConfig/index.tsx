@@ -415,17 +415,17 @@ export default function AdminCATConfig() {
                   <span className="text-xs text-muted-foreground">How often to checkpoint within a task</span>
                 </div>
                 <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
-                  <div className="grid grid-cols-[minmax(160px,1fr)_minmax(88px,100px)_minmax(170px,200px)_minmax(170px,200px)] items-center gap-2 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="grid grid-cols-[minmax(140px,1fr)_minmax(70px,90px)_minmax(330px,360px)_minmax(120px,140px)] items-center gap-2 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     <span>Name of Tests</span>
                     <span title="Relative importance; battery sums to 100%">Weight</span>
-                    <span>Practice (Min / Max)</span>
+                    <span>Practice (Min / Max / Pass / Restart)</span>
                     <span>Main (Min / Max)</span>
                   </div>
                   <div className="space-y-2">
                     {tasks.map((task) => (
                       <div
                         key={`trial-bounds-${task.task_name}`}
-                        className="grid grid-cols-[minmax(160px,1fr)_minmax(88px,100px)_minmax(170px,200px)_minmax(170px,200px)] items-center gap-2"
+                        className="grid grid-cols-[minmax(140px,1fr)_minmax(70px,90px)_minmax(330px,360px)_minmax(120px,140px)] items-center gap-2"
                       >
                         <span className="text-sm">{task.display_name}</span>
                         <input
@@ -448,13 +448,14 @@ export default function AdminCATConfig() {
                           }}
                           className="h-8 w-full max-w-[100px] rounded border border-border bg-background px-2 text-sm"
                         />
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <input
                             type="number"
                             min={1}
                             max={500}
                             value={practiceConfig[task.task_name]?.min_trials ?? ""}
                             placeholder="Min"
+                            title="Min trials before evaluation"
                             onChange={(e) =>
                               setPracticeConfig({
                                 ...practiceConfig,
@@ -464,7 +465,7 @@ export default function AdminCATConfig() {
                                 },
                               })
                             }
-                            className="h-8 w-20 rounded border border-border bg-background px-2 text-sm"
+                            className="h-8 w-12 rounded border border-border bg-background px-1 text-xs text-center"
                           />
                           <input
                             type="number"
@@ -472,6 +473,7 @@ export default function AdminCATConfig() {
                             max={500}
                             value={practiceConfig[task.task_name]?.max_trials ?? ""}
                             placeholder="Max"
+                            title="Max trials limit"
                             onChange={(e) =>
                               setPracticeConfig({
                                 ...practiceConfig,
@@ -481,8 +483,47 @@ export default function AdminCATConfig() {
                                 },
                               })
                             }
-                            className="h-8 w-20 rounded border border-border bg-background px-2 text-sm"
+                            className="h-8 w-12 rounded border border-border bg-background px-1 text-xs text-center"
                           />
+                          <span className="text-muted-foreground text-xs">/</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={Math.round((practiceConfig[task.task_name]?.pass_threshold ?? 0.8) * 100)}
+                            placeholder="Pass %"
+                            title="Accuracy % required to pass practice"
+                            onChange={(e) =>
+                              setPracticeConfig({
+                                ...practiceConfig,
+                                [task.task_name]: {
+                                  ...practiceConfig[task.task_name],
+                                  pass_threshold: parseIntegerValue(e.target.value) / 100,
+                                },
+                              })
+                            }
+                            className="h-8 w-12 rounded border border-border bg-background px-1 text-xs text-center"
+                          />
+                          <span className="text-xs text-muted-foreground" title="Pass threshold">% Pass</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={Math.round((practiceConfig[task.task_name]?.continue_threshold ?? 0.5) * 100)}
+                            placeholder="Restart %"
+                            title="Accuracy % below which practice restarts"
+                            onChange={(e) =>
+                              setPracticeConfig({
+                                ...practiceConfig,
+                                [task.task_name]: {
+                                  ...practiceConfig[task.task_name],
+                                  continue_threshold: parseIntegerValue(e.target.value) / 100,
+                                },
+                              })
+                            }
+                            className="h-8 w-12 rounded border border-border bg-background px-1 text-xs text-center"
+                          />
+                          <span className="text-xs text-muted-foreground" title="Restart threshold">% Restart</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <input
@@ -494,7 +535,7 @@ export default function AdminCATConfig() {
                             onChange={(e) =>
                               setMinTrials({ ...minTrials, [task.task_name]: parseIntegerValue(e.target.value) })
                             }
-                            className="h-8 w-20 rounded border border-border bg-background px-2 text-sm"
+                            className="h-8 w-14 rounded border border-border bg-background px-2 text-sm"
                           />
                           <input
                             type="number"
@@ -505,7 +546,7 @@ export default function AdminCATConfig() {
                             onChange={(e) =>
                               setMaxTrials({ ...maxTrials, [task.task_name]: parseIntegerValue(e.target.value) })
                             }
-                            className="h-8 w-20 rounded border border-border bg-background px-2 text-sm"
+                            className="h-8 w-14 rounded border border-border bg-background px-2 text-sm"
                           />
                         </div>
                       </div>

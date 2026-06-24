@@ -9,6 +9,7 @@ type Props = {
 };
 
 export function SRTInstructions({ onStart, isReinstruction, reinstructionLevel, reinstructionHint }: Props) {
+  const isAdditional = isReinstruction && reinstructionLevel === "additional";
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-6 rounded-xl border border-border bg-card p-8">
@@ -23,14 +24,18 @@ export function SRTInstructions({ onStart, isReinstruction, reinstructionLevel, 
         {isReinstruction && reinstructionHint && (
           <p className="text-sm text-muted-foreground">{reinstructionHint}</p>
         )}
-        <p className="text-muted-foreground">
-          A colored figure will appear on screen. Press the <strong>space bar</strong> as quickly as
-          possible when you see it.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          There will be a short practice block first, then the main task. Please avoid guessing when
-          the stimulus will appear, wait until you see it.
-        </p>
+        {!isAdditional && (
+          <>
+            <p className="text-muted-foreground">
+              A colored figure will appear on screen. Press the <strong>space bar</strong> as quickly as
+              possible when you see it.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              There will be a short practice block first, then the main task. Please avoid guessing when
+              the stimulus will appear, wait until you see it.
+            </p>
+          </>
+        )}
         <Button onClick={onStart} variant="outline" size="lg">
           {isReinstruction ? "Resume practice" : "Start practice"}
         </Button>
