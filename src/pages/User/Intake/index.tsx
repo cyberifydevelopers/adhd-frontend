@@ -301,7 +301,7 @@ export default function UserIntake() {
         setFormularyItems(fItems);
 
         const r = await usersMeService.getIntake();
-        const id = r.intake_data ?? {};
+        const id = (r.intake_data as any) ?? {};
         setDateOfBirth(String((id.date_of_birth as string) ?? "").slice(0, 10));
         setAdhdHistory(Boolean(id.adhd_history));
         setMedicationStatus(Boolean(r.medication_status ?? id.medication_status));
@@ -323,7 +323,7 @@ export default function UserIntake() {
 
         // Filter/find medications taken today (time_last_taken is set)
         const todayMeds = meds.filter((m) => m.time_last_taken);
-        setTookMedicationToday(Boolean(r.took_medication_today ?? id.took_medication_today ?? todayMeds.length > 0));
+        setTookMedicationToday(Boolean(id.took_medication_today ?? todayMeds.length > 0));
         
         const mappedTodayMeds: TodayMedicationEntry[] = todayMeds.map((m) => {
           const matched = fItems.find((f) => f.name === m.name);
@@ -525,9 +525,7 @@ export default function UserIntake() {
                 if (!v) {
                   setMedications([]);
                   setTookMedicationToday(false);
-                  setMedicationTimeTaken("");
-                  setTodayMedicineName("");
-                  setTodayMedicineStrength("");
+                  setTodayMedications([]);
                 }
               }}
             />

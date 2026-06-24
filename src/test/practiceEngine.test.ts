@@ -159,7 +159,7 @@ describe("practiceEngine evaluateSSTBlock", () => {
       sstGoCorrect: 6, // 60% > 50%
     });
 
-    const decision = evaluateSSTBlock(state, baseConfig);
+    const decision = evaluateSSTBlock(state, baseConfig) as any;
     expect(decision.action).toBe("proceed_to_main");
     expect(decision.passed).toBe(false);
     expect(decision.lowConfidence).toBe(true);
@@ -172,7 +172,7 @@ describe("practiceEngine evaluateSSTBlock", () => {
       sstGoCorrect: 4, // 40% < 50%
     });
 
-    const decision = evaluateSSTBlock(state, baseConfig);
+    const decision = evaluateSSTBlock(state, baseConfig) as any;
     expect(decision.action).toBe("reinstructions");
     expect(decision.level).toBe("additional");
     expect(decision.hint).toContain("Respond quickly on GO trials");
@@ -185,7 +185,7 @@ describe("practiceEngine evaluateSSTBlock", () => {
       sstGoCorrect: 0,
     });
 
-    const decision = evaluateSSTBlock(state, baseConfig);
+    const decision = evaluateSSTBlock(state, baseConfig) as any;
     expect(decision.action).toBe("reinstructions");
     expect(decision.level).toBe("additional");
   });
