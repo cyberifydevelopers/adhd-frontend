@@ -251,7 +251,9 @@ export default function DigitSpanTask() {
             isPractice && PRACTICE_LAYOUT_BOTTOM_PADDING,
           )}
         >
-          <p className="text-muted-foreground">Enter the digits ({direction})</p>
+          <p className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            {direction}
+          </p>
           {!isPractice && mainLadderPhase && (
             <p className="text-xs font-medium text-primary">
               {mainLadderPhase === "forward" ? "Forward" : "Backward"} ladder · started length{" "}

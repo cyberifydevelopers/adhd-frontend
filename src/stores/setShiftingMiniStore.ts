@@ -324,8 +324,17 @@ function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShifti
         lastFive.length >= 5 &&
         lastFiveAcc >= passThreshold;
       if (!passed && !reachedMax) {
-        const nextTrial = state.trials[nextIndex];
+        let currentTrials = state.trials;
+        let nextTrial = currentTrials[nextIndex];
+        if (!nextTrial) {
+          // Pre-built trial batch is exhausted but maxPractice not yet reached — generate more.
+          const remaining = Math.max(5, maxPractice - practiceEvents.length);
+          const moreTrials = buildPracticeTrials(remaining);
+          currentTrials = [...currentTrials, ...moreTrials];
+          nextTrial = currentTrials[nextIndex];
+        }
         set({
+          trials: currentTrials,
           phase: "practice",
           status: "stimulus",
           trialIndex: nextIndex,

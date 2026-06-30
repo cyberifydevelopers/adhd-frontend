@@ -17,7 +17,7 @@ export function SSTInstructions({ onStart, isReinstruction, reinstructionLevel, 
         {isReinstruction && (
           <p className="text-sm text-amber-600">
             {reinstructionLevel === "simplified"
-              ? "Let’s simplify the rule, then try again."
+              ? "Let’s simplify the instructions, then try again."
               : "Here’s an extra tip before continuing."}
           </p>
         )}

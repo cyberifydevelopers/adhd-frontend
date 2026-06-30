@@ -395,9 +395,12 @@ export const wmDistractionStore = create<WMDistractionState>((set, get) => ({
           userInput: "",
         });
         if (state._refs.timerId) clearTimeout(state._refs.timerId);
-        state._refs.timerId = setTimeout(() => {
-          state.submitRecall();
-        }, getRecallTimeoutMs(activeTrial.span));
+        // Practice recall is not time-limited — the user must click Submit.
+        if (!state.isPractice) {
+          state._refs.timerId = setTimeout(() => {
+            state.submitRecall();
+          }, getRecallTimeoutMs(activeTrial.span));
+        }
       };
 
       if (trial.condition === "clean" && !isPractice) {
@@ -721,7 +724,7 @@ export const wmDistractionStore = create<WMDistractionState>((set, get) => ({
       state.advanceDisplay();
       return;
     }
-    if (phase === "recalling" && !_refs.recallSubmitCommitted) {
+    if (phase === "recalling" && !_refs.recallSubmitCommitted && !state.isPractice) {
       _refs.timerId = setTimeout(() => get().submitRecall(), getRecallTimeoutMs(trial.span));
     }
   },
