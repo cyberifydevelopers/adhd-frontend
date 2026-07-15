@@ -88,7 +88,7 @@ function computeFlankerMetrics(
   };
 }
 
-export type FlankerPhase = "instructions" | "practice" | "main" | "extension" | "complete";
+export type FlankerPhase = "instructions" | "practice" | "main_ready" | "main" | "extension" | "complete";
 
 export type FlankerTrial = {
   foreperiod: number;
@@ -129,8 +129,17 @@ function buildOneTrial(params: FlankerAdaptiveParams, priorEvents: Record<string
   };
 }
 
-function buildTrials(count: number, params: FlankerAdaptiveParams): FlankerTrial[] {
-  const pseudoEvents: Record<string, unknown>[] = [];
+/**
+ * `priorEvents` seeds the congruent/incongruent cell counts so repeated calls across a
+ * session (e.g. one practice block at a time) keep counting toward the ≥15-per-cell gate
+ * in `pickFlankerCongruence` instead of restarting from zero and staying congruent-only.
+ */
+function buildTrials(
+  count: number,
+  params: FlankerAdaptiveParams,
+  priorEvents: Record<string, unknown>[] = [],
+): FlankerTrial[] {
+  const pseudoEvents: Record<string, unknown>[] = [...priorEvents];
   const trials: FlankerTrial[] = [];
   for (let i = 0; i < count; i += 1) {
     const trial = buildOneTrial(params, pseudoEvents);
@@ -224,6 +233,7 @@ type FlankerState = {
   startPractice: () => Promise<void>;
   resumePractice: () => void;
   restartMain: () => void;
+  confirmMainStart: () => void;
   finishPractice: () => Promise<void>;
   startExtension: (trialsToAdd: number) => void;
   finishMain: () => Promise<boolean>;
@@ -400,7 +410,7 @@ export const flankerStore = create<FlankerState>((set, get) => ({
           const remaining = config.maxTrials - updated.totalTrialsCompleted;
           const nextBlockSize = Math.min(config.evaluationInterval, remaining);
           set({
-            trials: [...get().trials, ...buildTrials(nextBlockSize, defaultAdaptiveParams)],
+            trials: [...get().trials, ...buildTrials(nextBlockSize, defaultAdaptiveParams, _refs.practiceEvents)],
             status: "waiting",
             practiceState: { ...counted, currentBlockCorrect: 0, currentBlockTrials: 0 },
           });
@@ -427,7 +437,7 @@ export const flankerStore = create<FlankerState>((set, get) => ({
           break;
         case "start_final":
           set({
-            trials: [...get().trials, ...buildTrials(config.finalTrialCount, defaultAdaptiveParams)],
+            trials: [...get().trials, ...buildTrials(config.finalTrialCount, defaultAdaptiveParams, _refs.practiceEvents)],
             status: "waiting",
             practiceState: { ...counted, subPhase: "final", currentBlockCorrect: 0, currentBlockTrials: 0 },
             lastPracticeFeedback: null,
@@ -727,7 +737,7 @@ export const flankerStore = create<FlankerState>((set, get) => ({
       _refs.maxTrials = trialCount;
 
       set({
-        phase: "main",
+        phase: "main_ready",
         trials: buildTrials(initialTrials, _refs.adaptiveParams),
         maxTrials: trialCount,
         trialIndex: 0,
@@ -780,13 +790,18 @@ export const flankerStore = create<FlankerState>((set, get) => ({
     catStore.getState().resetForNewTask();
     const initialMainTrials = Math.min(WARMUP_TRIALS, maxTrials);
     set({
-      phase: "main",
+      phase: "main_ready",
       status: "waiting",
       trialIndex: 0,
       trials: buildTrials(initialMainTrials, _refs.adaptiveParams),
       events: [],
-      mainReinstruction: false,
+      mainReinstruction: true,
     });
+  },
+
+  confirmMainStart: () => {
+    if (get().phase !== "main_ready") return;
+    set({ phase: "main", mainReinstruction: false });
   },
 
   finishMain: async () => {
@@ -798,6 +813,14 @@ export const flankerStore = create<FlankerState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
+
+    const totalMainTrials = _refs.events.length;
+    const correctMainTrials = _refs.events.filter((e) => e.is_correct === true).length;
+    if (totalMainTrials > 0 && correctMainTrials === 0) {
+      get().restartMain();
+      return false;
+    }
+
     try {
       if (_refs.events.length > 0) {
         await sessionsService.postEvents(sessionId, [..._refs.events]);

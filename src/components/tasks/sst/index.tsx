@@ -5,6 +5,7 @@ import { TaskLayout } from "../TaskLayout";
 import { TaskTransition } from "../TaskTransition";
 import { SSTInstructions } from "./SSTInstructions";
 import { SSTStimulus } from "./SSTStimulus";
+import { StartTestGate } from "../StartTestGate";
 import { PracticeFeedback } from "../PracticeFeedback";
 import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
@@ -29,7 +30,7 @@ export default function StopSignalTask() {
   const currentStimulus = sstStore((s) => s.currentStimulus);
   const startPractice = sstStore((s) => s.startPractice);
   const resumePractice = sstStore((s) => s.resumePractice);
-  const restartMain = sstStore((s) => s.restartMain);
+  const confirmMainStart = sstStore((s) => s.confirmMainStart);
   const startExtension = sstStore((s) => s.startExtension);
   const advanceTrial = sstStore((s) => s.advanceTrial);
   const finishMain = sstStore((s) => s.finishMain);
@@ -57,13 +58,12 @@ export default function StopSignalTask() {
   const mainCountdownStarted = useRef(false);
   const handleStartPractice = useCallback(() => {
     startCountdown("practice", () => {
-      if (mainReinstruction) return restartMain();
       return practiceReinstruction ? resumePractice() : startPractice();
     });
-  }, [mainReinstruction, practiceReinstruction, restartMain, resumePractice, startPractice, startCountdown]);
+  }, [practiceReinstruction, resumePractice, startPractice, startCountdown]);
 
   useEffect(() => {
-    if (phase === "instructions") {
+    if (phase === "instructions" || phase === "main_ready") {
       mainCountdownStarted.current = false;
       return;
     }
@@ -177,6 +177,14 @@ export default function StopSignalTask() {
           reinstructionLevel={practiceReinstructionLevel ?? undefined}
           reinstructionHint={practiceReinstructionHint ?? undefined}
         />
+      </TaskLayout>
+    );
+  }
+
+  if (phase === "main_ready") {
+    return (
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="sst" showMainAdaptivePanel={showMainAdaptivePanel} title="SST">
+        <StartTestGate onStart={confirmMainStart} isRetry={mainReinstruction} />
       </TaskLayout>
     );
   }

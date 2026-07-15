@@ -83,7 +83,7 @@ function computeCptMetrics(
 
 export type CPTTrial = { letter: string; type: "target" | "nontarget"; isi_ms: number };
 
-export type CPTPhase = "instructions" | "practice" | "main" | "extension" | "complete";
+export type CPTPhase = "instructions" | "practice" | "main_ready" | "main" | "extension" | "complete";
 
 type CPTAdaptiveParams = {
   targetRatio: number;
@@ -188,6 +188,7 @@ type CPTState = {
   startPractice: () => Promise<void>;
   resumePractice: () => void;
   restartMain: () => void;
+  confirmMainStart: () => void;
   startExtension: (trialsToAdd: number) => void;
   finishPractice: () => Promise<void>;
   finishMain: () => Promise<boolean>;
@@ -475,9 +476,10 @@ export const cptStore = create<CPTState>((set, get) => ({
 
     const blockIndex = phase === "extension" ? 1 : 0;
     const trial = currentTrials[trialIndex];
-    const onset = performance.now();
     const responseWindow = _refs.adaptiveParams.responseWindow;
 
+    const presentStimulus = () => {
+    const onset = performance.now();
     set({ currentLetter: trial.letter });
 
     _refs.stimulusTimeoutId = setTimeout(() => {
@@ -587,6 +589,18 @@ export const cptStore = create<CPTState>((set, get) => ({
         }, responseWindow);
       }
     }, CPT_STIMULUS_MS);
+    };
+
+    if (trialIndex === 0) {
+      // Show the fixation cross first, same as the inter-stimulus interval between later trials.
+      set({ currentLetter: null });
+      _refs.stimulusTimeoutId = setTimeout(() => {
+        _refs.stimulusTimeoutId = undefined;
+        presentStimulus();
+      }, trial.isi_ms);
+    } else {
+      presentStimulus();
+    }
   },
 
   startPractice: async () => {
@@ -731,7 +745,7 @@ export const cptStore = create<CPTState>((set, get) => ({
       // Seed a small batch; advanceTrial appends up to maxTrials (early adaptive stop).
       const initialMainTrials = Math.min(WARMUP_TRIALS, trialCount);
       set({
-        phase: "main",
+        phase: "main_ready",
         trials: Array.from({ length: initialMainTrials }, () => buildOneTrial(_refs.adaptiveParams)),
         maxTrials: trialCount,
         trialIndex: 0,
@@ -782,13 +796,18 @@ export const cptStore = create<CPTState>((set, get) => ({
     catStore.getState().resetForNewTask();
     const initialMainTrials = Math.min(WARMUP_TRIALS, maxTrials);
     set({
-      phase: "main",
+      phase: "main_ready",
       trialIndex: 0,
       trials: Array.from({ length: initialMainTrials }, () => buildOneTrial(_refs.adaptiveParams)),
       events: [],
       droppedFrames: 0,
-      mainReinstruction: false,
+      mainReinstruction: true,
     });
+  },
+
+  confirmMainStart: () => {
+    if (get().phase !== "main_ready") return;
+    set({ phase: "main", mainReinstruction: false });
   },
 
   finishMain: async () => {
@@ -800,6 +819,14 @@ export const cptStore = create<CPTState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
+
+    const totalMainTrials = _refs.events.length;
+    const correctMainTrials = _refs.events.filter((e) => e.is_correct === true).length;
+    if (totalMainTrials > 0 && correctMainTrials === 0) {
+      get().restartMain();
+      return false;
+    }
+
     const adaptiveStop = catStore.getState().blockEndTriggerReason === "main_adaptive_stop";
 
     if (_refs.events.length > 0) {

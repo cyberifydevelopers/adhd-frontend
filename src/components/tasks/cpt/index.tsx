@@ -8,6 +8,7 @@ import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { CPTInstructions } from "./CPTInstructions";
 import { CPTStimulus } from "./CPTStimulus";
+import { StartTestGate } from "../StartTestGate";
 import { TaskStartCountdown } from "../TaskStartCountdown";
 import { useTaskStartCountdown } from "../useTaskStartCountdown";
 import { cptStore } from "@/stores/cptStore";
@@ -31,7 +32,7 @@ export default function ContinuousPerformanceTest() {
   const currentLetter = cptStore((s) => s.currentLetter);
   const startPractice = cptStore((s) => s.startPractice);
   const resumePractice = cptStore((s) => s.resumePractice);
-  const restartMain = cptStore((s) => s.restartMain);
+  const confirmMainStart = cptStore((s) => s.confirmMainStart);
   const startExtension = cptStore((s) => s.startExtension);
   const advanceTrial = cptStore((s) => s.advanceTrial);
   const finishMain = cptStore((s) => s.finishMain);
@@ -61,13 +62,12 @@ export default function ContinuousPerformanceTest() {
   const blockEndFinishInFlight = useRef(false);
   const handleStartPractice = useCallback(() => {
     startCountdown("practice", () => {
-      if (mainReinstruction) return restartMain();
       return practiceReinstruction ? resumePractice() : startPractice();
     });
-  }, [mainReinstruction, practiceReinstruction, restartMain, resumePractice, startPractice, startCountdown]);
+  }, [practiceReinstruction, resumePractice, startPractice, startCountdown]);
 
   useEffect(() => {
-    if (phase === "instructions") {
+    if (phase === "instructions" || phase === "main_ready") {
       mainCountdownStarted.current = false;
       mainCountdownCompleted.current = false;
       return;
@@ -240,6 +240,14 @@ export default function ContinuousPerformanceTest() {
           reinstructionLevel={practiceReinstructionLevel ?? undefined}
           reinstructionHint={practiceReinstructionHint ?? undefined}
         />
+      </TaskLayout>
+    );
+  }
+
+  if (phase === "main_ready") {
+    return (
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="cpt" showMainAdaptivePanel={showMainAdaptivePanel} title="CPT">
+        <StartTestGate onStart={confirmMainStart} isRetry={mainReinstruction} />
       </TaskLayout>
     );
   }

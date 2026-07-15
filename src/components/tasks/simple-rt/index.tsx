@@ -8,6 +8,7 @@ import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { SRTInstructions } from "./SRTInstructions";
 import { SRTTrial } from "./SRTTrial";
+import { StartTestGate } from "../StartTestGate";
 import { TaskStartCountdown } from "../TaskStartCountdown";
 import { useTaskStartCountdown } from "../useTaskStartCountdown";
 import { srtStore } from "@/stores/srtStore";
@@ -28,7 +29,7 @@ export default function SimpleReactionTimeTask() {
   const maxTrials = srtStore((s) => s.maxTrials);
   const startPractice = srtStore((s) => s.startPractice);
   const resumePractice = srtStore((s) => s.resumePractice);
-  const restartMain = srtStore((s) => s.restartMain);
+  const confirmMainStart = srtStore((s) => s.confirmMainStart);
   const scheduleStimulus = srtStore((s) => s.scheduleStimulus);
   const recordResponse = srtStore((s) => s.recordResponse);
   const startExtension = srtStore((s) => s.startExtension);
@@ -59,13 +60,12 @@ export default function SimpleReactionTimeTask() {
   const mainCountdownCompleted = useRef(false);
   const handleStartPractice = useCallback(() => {
     startCountdown("practice", () => {
-      if (mainReinstruction) return restartMain();
       return practiceReinstruction ? resumePractice() : startPractice();
     });
-  }, [mainReinstruction, practiceReinstruction, restartMain, resumePractice, startPractice, startCountdown]);
+  }, [practiceReinstruction, resumePractice, startPractice, startCountdown]);
 
   useEffect(() => {
-    if (phase === "instructions") {
+    if (phase === "instructions" || phase === "main_ready") {
       mainCountdownStarted.current = false;
       mainCountdownCompleted.current = false;
       return;
@@ -200,6 +200,14 @@ export default function SimpleReactionTimeTask() {
           reinstructionLevel={practiceReinstructionLevel ?? undefined}
           reinstructionHint={practiceReinstructionHint ?? undefined}
         />
+      </TaskLayout>
+    );
+  }
+
+  if (phase === "main_ready") {
+    return (
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="simple_rt" showMainAdaptivePanel={showMainAdaptivePanel} title="Simple Reaction Time">
+        <StartTestGate onStart={confirmMainStart} isRetry={mainReinstruction} />
       </TaskLayout>
     );
   }

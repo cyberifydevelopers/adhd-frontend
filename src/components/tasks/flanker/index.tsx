@@ -8,6 +8,7 @@ import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { FlankerInstructions } from "./FlankerInstructions";
 import { FlankerStimulus } from "./FlankerStimulus";
+import { StartTestGate } from "../StartTestGate";
 import { TaskStartCountdown } from "../TaskStartCountdown";
 import { useTaskStartCountdown } from "../useTaskStartCountdown";
 import { flankerStore, CORRECT_KEYS_FLANKER } from "@/stores/flankerStore";
@@ -28,7 +29,7 @@ export default function FlankerTask() {
   const maxTrials = flankerStore((s) => s.maxTrials);
   const startPractice = flankerStore((s) => s.startPractice);
   const resumePractice = flankerStore((s) => s.resumePractice);
-  const restartMain = flankerStore((s) => s.restartMain);
+  const confirmMainStart = flankerStore((s) => s.confirmMainStart);
   const scheduleStimulus = flankerStore((s) => s.scheduleStimulus);
   const recordResponse = flankerStore((s) => s.recordResponse);
   const startExtension = flankerStore((s) => s.startExtension);
@@ -56,21 +57,23 @@ export default function FlankerTask() {
   const { countdown, startCountdown } = useTaskStartCountdown();
   const showMainAdaptivePanel = phase === "main" || phase === "extension";
   const mainCountdownStarted = useRef(false);
+  const mainCountdownCompleted = useRef(false);
   const handleStartPractice = useCallback(() => {
     startCountdown("practice", () => {
-      if (mainReinstruction) return restartMain();
       return practiceReinstruction ? resumePractice() : startPractice();
     });
-  }, [mainReinstruction, practiceReinstruction, restartMain, resumePractice, startPractice, startCountdown]);
+  }, [practiceReinstruction, resumePractice, startPractice, startCountdown]);
 
   useEffect(() => {
-    if (phase === "instructions") {
+    if (phase === "instructions" || phase === "main_ready") {
       mainCountdownStarted.current = false;
+      mainCountdownCompleted.current = false;
       return;
     }
     if (phase === "main" && !mainCountdownStarted.current) {
       mainCountdownStarted.current = true;
       startCountdown("main", () => {
+        mainCountdownCompleted.current = true;
         const s = flankerStore.getState();
         if (s.phase === "main" && s.status === "waiting" && s.trials[s.trialIndex]) {
           s.scheduleStimulus(s.trials[s.trialIndex]!, s.trialIndex);
@@ -185,6 +188,7 @@ export default function FlankerTask() {
     if (isPaused) return;
     if (countdown?.phase === "main") return;
     if (shouldTrigger && (phase === "main" || phase === "extension")) return;
+    if (phase === "main" && !mainCountdownCompleted.current) return;
     if ((phase === "practice" || phase === "main" || phase === "extension") && status === "waiting") {
       const trial = trials[trialIndex];
       if (trial) scheduleStimulus(trial, trialIndex);
@@ -246,6 +250,14 @@ export default function FlankerTask() {
     );
   }
 
+  if (phase === "main_ready") {
+    return (
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="flanker" showMainAdaptivePanel={showMainAdaptivePanel} title="Flanker Task">
+        <StartTestGate onStart={confirmMainStart} isRetry={mainReinstruction} />
+      </TaskLayout>
+    );
+  }
+
   if ((phase === "practice" || phase === "main" || phase === "extension") && trials.length > 0) {
     const currentTrial = trials[trialIndex];
     const feedbackType = phase === "practice"
@@ -280,7 +292,7 @@ export default function FlankerTask() {
               />
             )
           }
-          contentClassName="flex flex-col items-center justify-center"
+          contentClassName="flex flex-col items-center justify-center select-none cursor-default"
         >
           {status === "waiting" && (
             <div className="flex flex-col items-center gap-4">

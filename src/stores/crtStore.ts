@@ -53,7 +53,7 @@ function computeCrtMetrics(events: Record<string, unknown>[]): Record<string, un
   };
 }
 
-export type CRTPhase = "instructions" | "practice" | "main" | "extension" | "complete";
+export type CRTPhase = "instructions" | "practice" | "main_ready" | "main" | "extension" | "complete";
 
 export type CRTTrial = { foreperiod: number; direction: Direction };
 
@@ -116,6 +116,7 @@ type CRTState = {
   startPractice: () => Promise<void>;
   resumePractice: () => void;
   restartMain: () => void;
+  confirmMainStart: () => void;
   finishPractice: () => Promise<void>;
   startMain: () => Promise<void>;
   startExtension: (trialsToAdd: number) => void;
@@ -524,7 +525,7 @@ export const crtStore = create<CRTState>((set, get) => ({
       _refs.maxTrials = trialCount;
 
       set({
-        phase: "main",
+        phase: "main_ready",
         trials: buildTrials(initialTrials, defaultAdaptiveParams, CRT_DIRECTION_POOL),
         maxTrials: trialCount,
         trialIndex: 0,
@@ -598,12 +599,17 @@ export const crtStore = create<CRTState>((set, get) => ({
       trials: buildTrials(Math.min(WARMUP_TRIALS, maxTrials), defaultAdaptiveParams, CRT_DIRECTION_POOL),
       maxTrials,
       trialIndex: 0,
-      phase: "main",
+      phase: "main_ready",
       status: "waiting",
       events: [],
-      mainReinstruction: false,
+      mainReinstruction: true,
       threeChoiceActive: true,
     });
+  },
+
+  confirmMainStart: () => {
+    if (get().phase !== "main_ready") return;
+    set({ phase: "main", mainReinstruction: false });
   },
 
   finishMain: async () => {
@@ -618,6 +624,11 @@ export const crtStore = create<CRTState>((set, get) => ({
     const n = _refs.events.length;
     if (n === 0) {
       set({ phase: "complete", mainReinstruction: false });
+      return false;
+    }
+    const correctMainTrials = _refs.events.filter((e) => e.is_correct === true).length;
+    if (correctMainTrials === 0) {
+      get().restartMain();
       return false;
     }
     try {

@@ -100,7 +100,7 @@ function computeSstMetrics(events: Record<string, unknown>[]): Record<string, un
   };
 }
 
-export type SSTPhase = "instructions" | "practice" | "main" | "extension" | "complete";
+export type SSTPhase = "instructions" | "practice" | "main_ready" | "main" | "extension" | "complete";
 
 type Refs = {
   blockStart: number;
@@ -141,6 +141,7 @@ type SSTState = {
   startPractice: () => Promise<void>;
   resumePractice: () => void;
   restartMain: () => void;
+  confirmMainStart: () => void;
   startExtension: (trialsToAdd: number) => void;
   finishPractice: () => void;
   finishMain: () => Promise<boolean>;
@@ -687,7 +688,7 @@ export const sstStore = create<SSTState>((set, get) => ({
       const minStop = sstMinStopTrialsForSession(trialCount);
 
       set({
-        phase: "main",
+        phase: "main_ready",
         trials: buildSstMainTrialSchedule(trialCount, minStop),
         maxTrials: trialCount,
         trialIndex: 0,
@@ -731,10 +732,15 @@ export const sstStore = create<SSTState>((set, get) => ({
       trials: buildSstMainTrialSchedule(maxTrials, minStop),
       maxTrials,
       trialIndex: 0,
-      phase: "main",
+      phase: "main_ready",
       events: [],
-      mainReinstruction: false,
+      mainReinstruction: true,
     });
+  },
+
+  confirmMainStart: () => {
+    if (get().phase !== "main_ready") return;
+    set({ phase: "main", mainReinstruction: false });
   },
 
   finishMain: async () => {
@@ -746,6 +752,14 @@ export const sstStore = create<SSTState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
+
+    const totalMainTrials = _refs.events.length;
+    const correctMainTrials = _refs.events.filter((e) => e.is_correct === true).length;
+    if (totalMainTrials > 0 && correctMainTrials === 0) {
+      get().restartMain();
+      return false;
+    }
+
     if (_refs.events.length > 0) {
       try {
         await sessionsService.postEvents(sessionId, [..._refs.events]);

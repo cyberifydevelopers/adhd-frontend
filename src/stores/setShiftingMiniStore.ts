@@ -49,6 +49,8 @@ export type SetShiftPhase =
   | "complete"
   /** Practice finished & last-trial feedback elapsed; recap UI before main. */
   | "main_countdown_pending"
+  /** Manual "Start test" gate, shown after the recap and before the 3-2-1 countdown arms. */
+  | "main_ready"
   /** Recap visible long enough — UI may arm 3-2-1 for main trials (store-gated transition). */
   | "main_countdown_go";
 
@@ -93,11 +95,14 @@ type SetShiftingMiniState = {
   lastWasCorrect: boolean | null;
   lastTimedOut: boolean;
   lastCorrectLabel: string;
+  /** True when returning to the "Start test" gate after a main attempt scored 0%. */
+  mainReinstruction: boolean;
   _refs: Refs;
   startSession: () => Promise<void>;
   recordSelection: (itemId: string | null) => void;
   finishAndSave: () => Promise<void>;
   startMainPhase: () => void;
+  confirmMainStart: () => void;
   cleanup: () => void;
   resumeAfterPause: () => void;
   prepareForFreshRun: () => void;
@@ -290,6 +295,30 @@ type SetShiftingStoreSet = (
     | ((state: SetShiftingMiniState) => Partial<SetShiftingMiniState>),
 ) => void;
 
+/** Main attempt scored 0% — reset main-phase state and park at the "Start test" gate for a retry. */
+function restartMainAfterZeroScore(get: SetShiftingStoreGet, set: SetShiftingStoreSet): void {
+  const state = get();
+  const rel = state._refs;
+  resetMainAdaptiveRefs(rel);
+  rel.mainAdaptiveHistory = resetMainAdaptiveHistory();
+  const [r1] = rel.mainRuleSequence;
+  const firstMain = buildShiftTrial(r1, null);
+  rel.timeoutId = null;
+  set({
+    phase: "main_ready",
+    status: "stimulus",
+    isPractice: false,
+    trials: [firstMain],
+    trialIndex: 0,
+    mainDoneTrials: 0,
+    activeRule: firstMain.rule,
+    lastWasCorrect: null,
+    lastTimedOut: false,
+    lastCorrectLabel: "",
+    mainReinstruction: true,
+  });
+}
+
 /** Continue after per-trial feedback (practice advance, main advance, or task complete). */
 function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShiftingStoreSet) {
   if (isTaskPaused()) return;
@@ -371,6 +400,31 @@ function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShifti
           });
       }
 
+      if (!passed) {
+        // Reached max practice trials without passing — restart from the instructions
+        // screen (as other tasks do) instead of continuing on into the main test.
+        get().cleanup();
+        catStore.getState().resetForNewTask();
+        set({
+          phase: "instructions",
+          sessionId: null,
+          trialIndex: 0,
+          trials: [],
+          status: "stimulus",
+          events: [],
+          isPractice: true,
+          practiceDoneTrials: 0,
+          practiceTotalTrials: 0,
+          mainDoneTrials: 0,
+          mainTotalTrials: 0,
+          activeRule: null,
+          lastWasCorrect: null,
+          lastTimedOut: false,
+          lastCorrectLabel: "",
+        });
+        return;
+      }
+
       resetMainAdaptiveRefs(state._refs);
       state._refs.mainAdaptiveHistory = resetMainAdaptiveHistory();
       const [r1] = state._refs.mainRuleSequence;
@@ -387,7 +441,7 @@ function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShifti
       state._refs.timeoutId = setTimeout(() => {
         const s = get();
         if (s.phase !== "main_countdown_pending") return;
-        set({ phase: "main_countdown_go" });
+        set({ phase: "main_ready" });
       }, POST_PRACTICE_RECAP_HOLD_MS);
       return;
     }
@@ -480,14 +534,24 @@ function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShifti
     state.mainTotalTrials,
   ).history;
 
+  const scoredZero = m.responseTrials > 0 && m.correctTrials === 0;
+
   if (catStore.getState().shouldTriggerBlockEnd) {
     rel.timeoutId = null;
+    if (scoredZero) {
+      restartMainAfterZeroScore(get, set);
+      return;
+    }
     set({ phase: "complete", mainDoneTrials: mainCompletedCount });
     return;
   }
 
   if (rel.mainLearningComplete) {
     rel.timeoutId = null;
+    if (scoredZero) {
+      restartMainAfterZeroScore(get, set);
+      return;
+    }
     set({ phase: "complete", mainDoneTrials: mainCompletedCount });
     return;
   }
@@ -495,6 +559,10 @@ function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShifti
   const hitSessionCap = mainCompletedCount >= state.mainTotalTrials;
   if (hitSessionCap) {
     rel.timeoutId = null;
+    if (scoredZero) {
+      restartMainAfterZeroScore(get, set);
+      return;
+    }
     set({ phase: "complete", mainDoneTrials: mainCompletedCount });
     return;
   }
@@ -552,6 +620,7 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
   lastWasCorrect: null,
   lastTimedOut: false,
   lastCorrectLabel: "",
+  mainReinstruction: false,
   _refs: {
     stimulusOnset: 0,
     blockStart: 0,
@@ -746,6 +815,11 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
     state._refs.timeoutId = setTimeout(() => state.recordSelection(null), RESPONSE_TIMEOUT_MS);
   },
 
+  confirmMainStart: () => {
+    if (get().phase !== "main_ready") return;
+    set({ phase: "main_countdown_go", mainReinstruction: false });
+  },
+
   cleanup: () => {
     const { _refs } = get();
     if (_refs.timeoutId) {
@@ -771,7 +845,7 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
       _refs.timeoutId = setTimeout(() => {
         const s = get();
         if (s.phase !== "main_countdown_pending") return;
-        set({ phase: "main_countdown_go" });
+        set({ phase: "main_ready" });
       }, POST_PRACTICE_RECAP_HOLD_MS);
       return;
     }
@@ -811,6 +885,7 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
       lastWasCorrect: null,
       lastTimedOut: false,
       lastCorrectLabel: "",
+      mainReinstruction: false,
     });
   },
 }));

@@ -50,7 +50,7 @@ function computeSrtMetrics(
   };
 }
 
-export type SRTPhase = "instructions" | "practice" | "main" | "extension" | "complete";
+export type SRTPhase = "instructions" | "practice" | "main_ready" | "main" | "extension" | "complete";
 
 export type SRTTrial = { foreperiod: number; isCatchTrial?: boolean };
 
@@ -112,6 +112,7 @@ type SRTState = {
   startPractice: () => Promise<void>;
   resumePractice: () => void;
   restartMain: () => void;
+  confirmMainStart: () => void;
   finishPractice: () => Promise<void>;
   startExtension: (trialsToAdd: number) => void;
   finishMain: () => Promise<boolean>;
@@ -527,7 +528,7 @@ export const srtStore = create<SRTState>((set, get) => ({
       _refs.maxTrials = trialCount;
 
       set({
-        phase: "main",
+        phase: "main_ready",
         trials: buildTrials(initialTrials, MAIN_SRT_TIMING),
         maxTrials: trialCount,
         trialIndex: 0,
@@ -573,6 +574,14 @@ export const srtStore = create<SRTState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
+
+    const totalMainTrials = _refs.events.length;
+    const correctMainTrials = _refs.events.filter((e) => e.is_correct === true).length;
+    if (totalMainTrials > 0 && correctMainTrials === 0) {
+      get().restartMain();
+      return false;
+    }
+
     try {
       if (_refs.events.length > 0) {
         await sessionsService.postEvents(sessionId, [..._refs.events]);
@@ -605,13 +614,18 @@ export const srtStore = create<SRTState>((set, get) => ({
     catStore.getState().resetForNewTask();
     const initialMainTrials = Math.min(WARMUP_TRIALS, maxTrials);
     set({
-      phase: "main",
+      phase: "main_ready",
       status: "waiting",
       trialIndex: 0,
       trials: buildTrials(initialMainTrials, MAIN_SRT_TIMING),
       events: [],
-      mainReinstruction: false,
+      mainReinstruction: true,
     });
+  },
+
+  confirmMainStart: () => {
+    if (get().phase !== "main_ready") return;
+    set({ phase: "main", mainReinstruction: false });
   },
 
   finishExtension: async () => {

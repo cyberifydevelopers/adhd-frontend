@@ -7,6 +7,7 @@ import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { TaskStartCountdown } from "../TaskStartCountdown";
 import { useTaskStartCountdown } from "../useTaskStartCountdown";
+import { StartTestGate } from "../StartTestGate";
 import { Button } from "@/components/ui/Button";
 import { setShiftingMiniStore, setShiftingRuleText } from "@/stores/setShiftingMiniStore";
 import { catStore } from "@/stores/catStore";
@@ -22,7 +23,10 @@ export default function SetShiftingMiniTask() {
   const phase = setShiftingMiniStore((s) => s.phase);
   const isPractice = setShiftingMiniStore((s) => s.isPractice);
   const showMainAdaptivePanel =
-    !isPractice && phase !== "instructions" && phase !== "complete";
+    !isPractice &&
+    phase !== "instructions" &&
+    phase !== "complete" &&
+    phase !== "main_ready";
   const trialIndex = setShiftingMiniStore((s) => s.trialIndex);
   const trials = setShiftingMiniStore((s) => s.trials);
   const activeRule = setShiftingMiniStore((s) => s.activeRule);
@@ -37,6 +41,8 @@ export default function SetShiftingMiniTask() {
   const startSession = setShiftingMiniStore((s) => s.startSession);
   const recordSelection = setShiftingMiniStore((s) => s.recordSelection);
   const finishAndSave = setShiftingMiniStore((s) => s.finishAndSave);
+  const confirmMainStart = setShiftingMiniStore((s) => s.confirmMainStart);
+  const mainReinstruction = setShiftingMiniStore((s) => s.mainReinstruction);
   const cleanup = setShiftingMiniStore((s) => s.cleanup);
   const resumeAfterPause = setShiftingMiniStore((s) => s.resumeAfterPause);
   const sessionId = setShiftingMiniStore((s) => s.sessionId);
@@ -83,6 +89,7 @@ export default function SetShiftingMiniTask() {
       phase === "instructions" ||
       phase === "complete" ||
       phase === "main_countdown_pending" ||
+      phase === "main_ready" ||
       phase === "main_countdown_go"
     ) {
       return;
@@ -225,6 +232,14 @@ export default function SetShiftingMiniTask() {
     return (
       <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="set_shifting_mini" showMainAdaptivePanel={showMainAdaptivePanel} title="Set-Shifting (Short)">
         <TaskStartCountdown secondsLeft={countdown.secondsLeft} phaseLabel={countdown.phase} />
+      </TaskLayout>
+    );
+  }
+
+  if (phase === "main_ready") {
+    return (
+      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="set_shifting_mini" showMainAdaptivePanel={showMainAdaptivePanel} title="Set-Shifting (Short)">
+        <StartTestGate onStart={confirmMainStart} isRetry={mainReinstruction} />
       </TaskLayout>
     );
   }

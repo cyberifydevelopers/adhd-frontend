@@ -76,7 +76,7 @@ function computeTaskSwitchingMetrics(
   };
 }
 
-export type TaskSwitchingPhase = "instructions" | "practice" | "main" | "extension" | "complete";
+export type TaskSwitchingPhase = "instructions" | "practice" | "main_ready" | "main" | "extension" | "complete";
 
 export type TaskSwitchingTrial = {
   foreperiod: number;
@@ -204,6 +204,7 @@ type TaskSwitchingState = {
   finishPractice: () => Promise<void>;
   startMain: () => Promise<void>;
   restartMain: () => void;
+  confirmMainStart: () => void;
   startExtension: (trialsToAdd: number) => void;
   finishMain: () => Promise<boolean>;
   finishExtension: () => Promise<void>;
@@ -721,7 +722,7 @@ export const taskSwitchingStore = create<TaskSwitchingState>((set, get) => ({
       _refs.maxTrials = trialCount;
 
       set({
-        phase: "main",
+        phase: "main_ready",
         trials: buildTrials(initialTrials, _refs.adaptiveParams),
         maxTrials: trialCount,
         trialIndex: 0,
@@ -789,12 +790,17 @@ export const taskSwitchingStore = create<TaskSwitchingState>((set, get) => ({
       trials: buildTrials(initialMainTrials, _refs.adaptiveParams),
       maxTrials,
       trialIndex: 0,
-      phase: "main",
+      phase: "main_ready",
       status: "waiting",
       events: [],
-      mainReinstruction: false,
+      mainReinstruction: true,
       specReinstructionBanner: null,
     });
+  },
+
+  confirmMainStart: () => {
+    if (get().phase !== "main_ready") return;
+    set({ phase: "main", mainReinstruction: false });
   },
 
   startExtension: (trialsToAdd: number) => {
@@ -833,6 +839,14 @@ export const taskSwitchingStore = create<TaskSwitchingState>((set, get) => ({
       set({ phase: "complete" });
       return false;
     }
+
+    const totalMainTrials = _refs.events.length;
+    const correctMainTrials = _refs.events.filter((e) => e.is_correct === true).length;
+    if (totalMainTrials > 0 && correctMainTrials === 0) {
+      get().restartMain();
+      return false;
+    }
+
     try {
       if (_refs.events.length > 0) {
         await sessionsService.postEvents(sessionId, [..._refs.events]);
