@@ -43,6 +43,9 @@ export default function SetShiftingMiniTask() {
   const finishAndSave = setShiftingMiniStore((s) => s.finishAndSave);
   const confirmMainStart = setShiftingMiniStore((s) => s.confirmMainStart);
   const mainReinstruction = setShiftingMiniStore((s) => s.mainReinstruction);
+  const practiceReinstruction = setShiftingMiniStore((s) => s.practiceReinstruction);
+  const practiceReinstructionHint = setShiftingMiniStore((s) => s.practiceReinstructionHint);
+  const resumePractice = setShiftingMiniStore((s) => s.resumePractice);
   const cleanup = setShiftingMiniStore((s) => s.cleanup);
   const resumeAfterPause = setShiftingMiniStore((s) => s.resumeAfterPause);
   const sessionId = setShiftingMiniStore((s) => s.sessionId);
@@ -61,6 +64,12 @@ export default function SetShiftingMiniTask() {
       return startSession();
     });
   }, [startSession, startCountdown]);
+
+  const handleResumePractice = useCallback(() => {
+    startCountdown("practice", () => {
+      resumePractice();
+    });
+  }, [resumePractice, startCountdown]);
 
   const handleRoutingDecision = useCallback(
     async (reason: string) => {
@@ -276,6 +285,45 @@ export default function SetShiftingMiniTask() {
   }
 
   if (phase === "instructions") {
+    if (practiceReinstruction) {
+      return (
+        <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="set_shifting_mini" showMainAdaptivePanel={showMainAdaptivePanel} title="Set-Shifting (Short)">
+          <div className="mx-auto max-w-2xl space-y-4 rounded-xl border border-border bg-card p-8 shadow-sm">
+            <h2 className="text-xl font-semibold">Let's review the rule</h2>
+            <p className="text-sm text-amber-600">
+              Your recent practice accuracy was below target. Here's a quick reminder before continuing.
+            </p>
+            {practiceReinstructionHint && (
+              <p className="text-sm text-muted-foreground">{practiceReinstructionHint}</p>
+            )}
+            <p className="text-muted-foreground">
+              You will see four shapes with colors. The banner tells you the current rule (for example, click square items).
+              Click the <strong>one</strong> item that satisfies that rule.
+            </p>
+            <ul className="list-inside list-disc space-y-2 text-sm text-muted-foreground">
+              <li>
+                <strong>If two items look like they both match</strong> (e.g. two squares in different colors), only{" "}
+                <strong>one</strong> is the scored answer. Use the grid order: <strong>start at the top-left</strong>, move
+                left to right on the top row, then the bottom row — pick the <strong>first</strong> item along that path
+                that clearly matches the rule.
+              </li>
+              <li>
+                The rule can change after you meet a streak of correct trials; when it does, follow the new banner, not
+                the old habit.
+              </li>
+              <li>You can take a moment to read the rule before each choice; respond before time runs out.</li>
+            </ul>
+            <Button
+              onClick={handleResumePractice}
+              className="inline-flex items-center gap-1.5"
+            >
+              <Play className="h-4 w-4" />
+              Resume practice
+            </Button>
+          </div>
+        </TaskLayout>
+      );
+    }
     return (
       <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="set_shifting_mini" showMainAdaptivePanel={showMainAdaptivePanel} title="Set-Shifting (Short)">
         <div className="mx-auto max-w-2xl space-y-4 rounded-xl border border-border bg-card p-8 shadow-sm">

@@ -97,6 +97,9 @@ type SetShiftingMiniState = {
   lastCorrectLabel: string;
   /** True when returning to the "Start test" gate after a main attempt scored 0%. */
   mainReinstruction: boolean;
+  /** True when parked back at instructions mid-practice because a checkpoint scored too low. */
+  practiceReinstruction: boolean;
+  practiceReinstructionHint: string | null;
   _refs: Refs;
   startSession: () => Promise<void>;
   recordSelection: (itemId: string | null) => void;
@@ -105,6 +108,7 @@ type SetShiftingMiniState = {
   confirmMainStart: () => void;
   cleanup: () => void;
   resumeAfterPause: () => void;
+  resumePractice: () => void;
   prepareForFreshRun: () => void;
 };
 
@@ -362,21 +366,25 @@ function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShifti
           currentTrials = [...currentTrials, ...moreTrials];
           nextTrial = currentTrials[nextIndex];
         }
+        if (state._refs.timeoutId) {
+          clearTimeout(state._refs.timeoutId);
+          state._refs.timeoutId = null;
+        }
+        // Checkpoint accuracy is too low — pause at instructions (like other practice
+        // tasks) instead of silently continuing, so the user re-reads the rule before resuming.
         set({
           trials: currentTrials,
-          phase: "practice",
+          phase: "instructions",
           status: "stimulus",
           trialIndex: nextIndex,
           practiceDoneTrials: practiceCompletedCount,
           activeRule: nextTrial?.rule ?? null,
+          practiceReinstruction: true,
+          practiceReinstructionHint:
+            lastFiveAcc >= continueThreshold
+              ? "Additional tip: follow the current rule on each trial."
+              : "Simplified tip: look at the rule first, then select only the matching item.",
         });
-        state._refs.stimulusOnset = performance.now();
-        state._refs.timeoutId = setTimeout(() => get().recordSelection(null), RESPONSE_TIMEOUT_MS);
-        toast.info(
-          lastFiveAcc >= continueThreshold
-            ? "Additional tip: follow the current rule on each trial."
-            : "Simplified tip: look at the rule first, then select only matching item.",
-        );
         return;
       }
 
@@ -421,6 +429,8 @@ function advanceFromSetShiftingFeedback(get: SetShiftingStoreGet, set: SetShifti
           lastWasCorrect: null,
           lastTimedOut: false,
           lastCorrectLabel: "",
+          practiceReinstruction: false,
+          practiceReinstructionHint: null,
         });
         return;
       }
@@ -621,6 +631,8 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
   lastTimedOut: false,
   lastCorrectLabel: "",
   mainReinstruction: false,
+  practiceReinstruction: false,
+  practiceReinstructionHint: null,
   _refs: {
     stimulusOnset: 0,
     blockStart: 0,
@@ -687,6 +699,8 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
         mainTotalTrials: mainTrials,
         activeRule: trials[0]?.rule ?? null,
         lastWasCorrect: null,
+        practiceReinstruction: false,
+        practiceReinstructionHint: null,
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to start");
@@ -856,6 +870,30 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
     }
   },
 
+  resumePractice: () => {
+    const state = get();
+    if (state.phase !== "instructions" || !state.practiceReinstruction) return;
+    const { _refs, trialIndex, trials } = state;
+    const nextTrial = trials[trialIndex];
+    if (!nextTrial) return;
+    if (_refs.timeoutId) {
+      clearTimeout(_refs.timeoutId);
+      _refs.timeoutId = null;
+    }
+    _refs.stimulusOnset = performance.now();
+    _refs.timeoutId = setTimeout(() => get().recordSelection(null), RESPONSE_TIMEOUT_MS);
+    set({
+      phase: "practice",
+      status: "stimulus",
+      activeRule: nextTrial.rule,
+      practiceReinstruction: false,
+      practiceReinstructionHint: null,
+      lastWasCorrect: null,
+      lastTimedOut: false,
+      lastCorrectLabel: "",
+    });
+  },
+
   prepareForFreshRun: () => {
     get().cleanup();
     const { _refs } = get();
@@ -886,6 +924,8 @@ export const setShiftingMiniStore = create<SetShiftingMiniState>((set, get) => (
       lastTimedOut: false,
       lastCorrectLabel: "",
       mainReinstruction: false,
+      practiceReinstruction: false,
+      practiceReinstructionHint: null,
     });
   },
 }));
