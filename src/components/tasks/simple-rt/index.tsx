@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { TaskLayout } from "../TaskLayout";
 import { TaskTransition } from "../TaskTransition";
-import { PracticeFeedback } from "../PracticeFeedback";
 import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { SRTInstructions } from "./SRTInstructions";
@@ -17,6 +16,14 @@ import { taskPauseStore } from "@/stores/taskPauseStore";
 import { usePrepareTaskFreshRun } from "@/hooks/usePrepareTaskFreshRun";
 
 const FEEDBACK_SETTLE_MS = 1600;
+
+function formatSrtFeedback(
+  feedbackType: "correct" | "incorrect" | "premature" | "omission" | null,
+): { label: string; className: string } | null {
+  if (feedbackType === "correct") return { label: "Correct", className: "text-green-500" };
+  if (feedbackType === "omission") return { label: "Try to respond faster", className: "text-muted-foreground" };
+  return null;
+}
 
 export default function SimpleReactionTimeTask() {
   usePrepareTaskFreshRun(() => {
@@ -41,13 +48,6 @@ export default function SimpleReactionTimeTask() {
   const sessionId = srtStore((s) => s.sessionId);
   const practiceState = srtStore((s) => s.practiceState);
   const lastPracticeFeedback = srtStore((s) => s.lastPracticeFeedback);
-  const lastPracticeCorrectKey = srtStore((s) => {
-    const last = s._refs.practiceEvents[s._refs.practiceEvents.length - 1] as Record<string, unknown> | undefined;
-    return (last?.correct_key as string | null | undefined) ?? null;
-  });
-  const practiceFeedbackKey = srtStore((s) => s._refs.practiceEvents.length);
-  const mainFeedbackKey = srtStore((s) => s._refs.events.length);
-  const lastMainEvent = srtStore((s) => s._refs.events[s._refs.events.length - 1] as Record<string, unknown> | undefined);
   const practiceReinstruction = srtStore((s) => s.practiceReinstruction);
   const practiceReinstructionLevel = srtStore((s) => s.practiceReinstructionLevel);
   const practiceReinstructionHint = srtStore((s) => s.practiceReinstructionHint);
@@ -213,17 +213,7 @@ export default function SimpleReactionTimeTask() {
   }
 
   if ((phase === "practice" || phase === "main" || phase === "extension") && trials.length > 0) {
-    const feedbackType = phase === "practice"
-      ? lastPracticeFeedback
-      : lastMainEvent
-        ? ((lastMainEvent.is_correct === true
-          ? "correct"
-          : ((lastMainEvent.reaction_time_ms as number | null | undefined) == null ? "omission" : "incorrect")))
-        : null;
-    const feedbackAnswer = phase === "practice"
-      ? lastPracticeCorrectKey
-      : ((lastMainEvent?.correct_key as string | null | undefined) ?? null);
-    const feedbackKey = phase === "practice" ? practiceFeedbackKey : mainFeedbackKey;
+    const practiceFeedback = phase === "practice" ? formatSrtFeedback(lastPracticeFeedback) : null;
     return (
       <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="simple_rt" showMainAdaptivePanel={showMainAdaptivePanel} title="Simple Reaction Time">
         {phase === "extension" && (
@@ -246,30 +236,7 @@ export default function SimpleReactionTimeTask() {
             )
           }
         >
-          <div className="relative w-full">
-            <SRTTrial
-              status={status}
-              stimulusKey={trialIndex}
-              completedTrials={
-                phase === "practice"
-                  ? (practiceState?.totalTrialsCompleted ?? 0)
-                  : eventsCompleted
-              }
-              maxTrials={
-                phase === "practice" ? srtStore.getState()._refs.practiceConfig.maxTrials : maxTrials
-              }
-              phase={phase}
-              practiceState={practiceState}
-              hideCompletedCaption={phase === "main" || phase === "extension"}
-            />
-            {phase === "practice" && (
-              <PracticeFeedback
-                feedbackType={feedbackType}
-                correctAnswer={feedbackAnswer}
-                feedbackKey={feedbackKey}
-              />
-            )}
-          </div>
+          <SRTTrial status={status} stimulusKey={trialIndex} feedback={practiceFeedback} />
         </TaskTrialCard>
       </TaskLayout>
     );

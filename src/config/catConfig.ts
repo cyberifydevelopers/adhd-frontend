@@ -46,10 +46,10 @@ export const ADAPTIVE_DEFAULTS = {
   /** Number of warmup trials generated with default params before adaptation kicks in */
   warmupTrials: 5,
 
-  /** Simple RT scored block: random fixation 500–1500 ms (no adaptive foreperiod on main). */
+  /** Simple RT scored block: random fixation 500–1000 ms (no adaptive foreperiod on main). */
   srt: {
     foreperiodMin: 500,
-    foreperiodMax: 1500,
+    foreperiodMax: 1000,
     catchTrialRate: 0,
   },
 

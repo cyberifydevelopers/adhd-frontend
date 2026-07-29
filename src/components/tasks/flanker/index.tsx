@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { TaskLayout } from "../TaskLayout";
 import { TaskTransition } from "../TaskTransition";
-import { PracticeFeedback } from "../PracticeFeedback";
 import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { FlankerInstructions } from "./FlankerInstructions";
@@ -17,6 +16,22 @@ import { taskPauseStore } from "@/stores/taskPauseStore";
 import { usePrepareTaskFreshRun } from "@/hooks/usePrepareTaskFreshRun";
 
 const FEEDBACK_SETTLE_MS = 1600;
+
+function formatFlankerFeedback(
+  feedbackType: "correct" | "incorrect" | "premature" | "omission" | null,
+  correctKey: string | null,
+): { label: string; className: string } | null {
+  if (!feedbackType) return null;
+  if (feedbackType === "correct") return { label: "Correct", className: "text-green-500" };
+  const direction = correctKey === "ArrowLeft" ? "left" : correctKey === "ArrowRight" ? "right" : "";
+  if (feedbackType === "omission") {
+    return { label: `Too slow – Correct answer was ${direction} arrow`, className: "text-muted-foreground" };
+  }
+  if (feedbackType === "incorrect") {
+    return { label: `Not quite – Correct answer was ${direction} arrow`, className: "text-orange-500" };
+  }
+  return null;
+}
 
 export default function FlankerTask() {
   usePrepareTaskFreshRun(() => {
@@ -45,9 +60,6 @@ export default function FlankerTask() {
     const last = s._refs.practiceEvents[s._refs.practiceEvents.length - 1] as Record<string, unknown> | undefined;
     return (last?.correct_key as string | null | undefined) ?? null;
   });
-  const practiceFeedbackKey = flankerStore((s) => s._refs.practiceEvents.length);
-  const mainFeedbackKey = flankerStore((s) => s._refs.events.length);
-  const lastMainEvent = flankerStore((s) => s._refs.events[s._refs.events.length - 1] as Record<string, unknown> | undefined);
   const practiceReinstruction = flankerStore((s) => s.practiceReinstruction);
   const practiceReinstructionLevel = flankerStore((s) => s.practiceReinstructionLevel);
   const practiceReinstructionHint = flankerStore((s) => s.practiceReinstructionHint);
@@ -260,17 +272,8 @@ export default function FlankerTask() {
 
   if ((phase === "practice" || phase === "main" || phase === "extension") && trials.length > 0) {
     const currentTrial = trials[trialIndex];
-    const feedbackType = phase === "practice"
-      ? lastPracticeFeedback
-      : lastMainEvent
-        ? ((lastMainEvent.is_correct === true
-          ? "correct"
-          : ((lastMainEvent.reaction_time_ms as number | null | undefined) == null ? "omission" : "incorrect")))
-        : null;
-    const feedbackAnswer = phase === "practice"
-      ? lastPracticeCorrectKey
-      : ((lastMainEvent?.correct_key as string | null | undefined) ?? null);
-    const feedbackKey = phase === "practice" ? practiceFeedbackKey : mainFeedbackKey;
+    const practiceFeedback =
+      phase === "practice" ? formatFlankerFeedback(lastPracticeFeedback, lastPracticeCorrectKey) : null;
     return (
       <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="flanker" showMainAdaptivePanel={showMainAdaptivePanel} title="Flanker Task">
         {phase === "extension" && (
@@ -295,39 +298,18 @@ export default function FlankerTask() {
           contentClassName="flex flex-col items-center justify-center select-none cursor-default"
         >
           {status === "waiting" && (
-            <div className="flex flex-col items-center gap-4">
-              <div className="text-7xl font-bold text-foreground" aria-hidden>+</div>
-              <p className="text-muted-foreground">Fixate until arrows appear</p>
-            </div>
+            <div className="text-7xl font-bold text-foreground" aria-hidden>+</div>
           )}
           {status === "stimulus" && currentTrial && (
-            <div className="flex flex-col items-center gap-6">
-              <FlankerStimulus
-                trial={currentTrial}
-                size={largeMainStimulus ? "younger" : "standard"}
-              />
-              <p className="text-lg text-muted-foreground">Press the matching arrow key</p>
-            </div>
-          )}
-          {status === "responded" && <div className="text-muted-foreground">Recorded</div>}
-          {phase === "practice" ? (
-            <p className="mt-8 text-sm text-muted-foreground">
-              Practice completed{" "}
-              {Math.min(practiceState?.totalTrialsCompleted ?? 0, flankerStore.getState()._refs.practiceConfig.maxTrials)}{" "}
-              / {flankerStore.getState()._refs.practiceConfig.maxTrials}
-              {practiceState?.subPhase === "final" ? " — Final" : ""}
-            </p>
-          ) : (
-            <p className="mt-8 text-sm text-muted-foreground">
-              Completed {Math.min(eventsCompleted, maxTrials)} / {maxTrials}
-            </p>
-          )}
-          {phase === "practice" && (
-            <PracticeFeedback
-              feedbackType={feedbackType}
-              correctAnswer={feedbackAnswer}
-              feedbackKey={feedbackKey}
+            <FlankerStimulus
+              trial={currentTrial}
+              size={largeMainStimulus ? "younger" : "standard"}
             />
+          )}
+          {status === "feedback" && practiceFeedback && (
+            <p className={`text-2xl font-semibold ${practiceFeedback.className}`}>
+              {practiceFeedback.label}
+            </p>
           )}
         </TaskTrialCard>
       </TaskLayout>

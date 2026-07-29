@@ -20,11 +20,12 @@ import {
 import type { AdaptiveHistory } from "@/lib/mainAdaptiveEngine";
 import { resetMainAdaptiveHistory, tryMainAdaptiveStop } from "@/lib/mainAdaptiveIntegration";
 import { buildSimpleRtLikeCheckpoint } from "@/lib/mainAdaptiveBridge";
-import { isTaskPaused, rtTrialStateAfterPauseCleanup } from "@/lib/taskPauseGuard";
+import { isTaskPaused } from "@/lib/taskPauseGuard";
 
 const MAIN_LIMITS = getMainTrialLimits("simple_rt");
 const MAIN_TRIALS = MAIN_LIMITS.maxTrials;
-const RESPONSE_TIMEOUT_MS = 2000;
+const RESPONSE_TIMEOUT_MS = 1500;
+const FEEDBACK_DISPLAY_MS = 1000;
 const WARMUP_TRIALS = ADAPTIVE_DEFAULTS.warmupTrials;
 
 function computeSrtMetrics(
@@ -95,7 +96,7 @@ type SRTState = {
   trialIndex: number;
   trials: SRTTrial[];
   maxTrials: number;
-  status: "waiting" | "stimulus" | "responded";
+  status: "waiting" | "stimulus" | "feedback";
   events: Record<string, unknown>[];
   _refs: Refs;
   additionalTrials: number;
@@ -128,10 +129,10 @@ const defaultAdaptiveParams: SRTAdaptiveParams = {
   catchTrialRate: ADAPTIVE_DEFAULTS.srt.catchTrialRate,
 };
 
-/** Scored main/extension: spec random fixation 500–1500 ms, no adaptive foreperiod or catch manipulation. */
+/** Scored main/extension: spec random fixation 500–1000 ms, no adaptive foreperiod or catch manipulation. */
 const MAIN_SRT_TIMING: SRTAdaptiveParams = {
   foreperiodMin: 500,
-  foreperiodMax: 1500,
+  foreperiodMax: 1000,
   catchTrialRate: 0,
 };
 
@@ -315,11 +316,6 @@ export const srtStore = create<SRTState>((set, get) => ({
         const latest = get();
         const r = latest._refs;
         if (latest.phase !== phase || latest.trialIndex !== idx) return;
-        if (latest.status === "responded") {
-          set({ status: "waiting", trialIndex: idx + 1 });
-          _refs.timeoutId = null;
-          return;
-        }
         if (r.activeStimulusTrialIndex !== idx || r.stimulusOutcomeRecorded) return;
         r.stimulusOutcomeRecorded = true;
         const recordEvent = phase === "practice" ? addPracticeEvent : addEvent;
@@ -338,14 +334,14 @@ export const srtStore = create<SRTState>((set, get) => ({
         const s = get();
         // If practice evaluation already advanced/reset phase or trial index, do not overwrite it.
         if (s.phase !== phase || s.trialIndex !== idx) return;
-        if (
-          (phase === "main" || phase === "extension") &&
-          catStore.getState().shouldTriggerBlockEnd
-        ) {
+        const holdAtEnd =
+          (phase === "main" || phase === "extension") && catStore.getState().shouldTriggerBlockEnd;
+        set({ status: "feedback", trialIndex: holdAtEnd ? idx : idx + 1 });
+        _refs.timeoutId = setTimeout(() => {
+          if (get().phase !== phase) { _refs.timeoutId = null; return; }
           set({ status: "waiting" });
-        } else {
-          set({ status: "waiting", trialIndex: idx + 1 });
-        }
+          _refs.timeoutId = null;
+        }, FEEDBACK_DISPLAY_MS);
       }, RESPONSE_TIMEOUT_MS);
     }, foreperiod);
   },
@@ -356,6 +352,11 @@ export const srtStore = create<SRTState>((set, get) => ({
     if (!trial || status !== "stimulus") return;
     if (_refs.activeStimulusTrialIndex !== trialIndex || _refs.stimulusOutcomeRecorded) return;
     _refs.stimulusOutcomeRecorded = true;
+
+    if (_refs.timeoutId) {
+      clearTimeout(_refs.timeoutId);
+      _refs.timeoutId = null;
+    }
 
     const keypressMs = performance.now();
     const recordEvent = phase === "practice" ? addPracticeEvent : addEvent;
@@ -375,19 +376,14 @@ export const srtStore = create<SRTState>((set, get) => ({
     const s = get();
     // Guard against stale write after practice engine changes phase/block.
     if (s.phase !== phase || s.trialIndex !== trialIndex) return;
-    if (phase === "main" || phase === "extension") {
-      if (_refs.timeoutId) {
-        clearTimeout(_refs.timeoutId);
-        _refs.timeoutId = null;
-      }
-      if (!catStore.getState().shouldTriggerBlockEnd) {
-        set({ status: "waiting", trialIndex: trialIndex + 1 });
-      } else {
-        set({ status: "waiting" });
-      }
-    } else {
-      set({ status: "responded" });
-    }
+    const holdAtEnd =
+      (phase === "main" || phase === "extension") && catStore.getState().shouldTriggerBlockEnd;
+    set({ status: "feedback", trialIndex: holdAtEnd ? trialIndex : trialIndex + 1 });
+    _refs.timeoutId = setTimeout(() => {
+      if (get().phase !== phase) { _refs.timeoutId = null; return; }
+      set({ status: "waiting" });
+      _refs.timeoutId = null;
+    }, FEEDBACK_DISPLAY_MS);
   },
 
   startPractice: async () => {
@@ -655,8 +651,11 @@ export const srtStore = create<SRTState>((set, get) => ({
   },
 
   cleanup: () => {
-    const pauseAdvance = rtTrialStateAfterPauseCleanup(get());
-    if (pauseAdvance) set(pauseAdvance);
+    const { phase, status } = get();
+    const activePhase = phase === "practice" || phase === "main" || phase === "extension";
+    if (activePhase && (status === "stimulus" || status === "feedback")) {
+      set({ status: "waiting" });
+    }
     const { _refs } = get();
     if (_refs.timeoutId) {
       clearTimeout(_refs.timeoutId);

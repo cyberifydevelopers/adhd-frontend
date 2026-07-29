@@ -19,59 +19,32 @@ const STIMULUS_SHAPES = [
 ] as const;
 
 type Props = {
-  status: "waiting" | "stimulus" | "responded";
+  status: "waiting" | "stimulus" | "feedback";
   /** Version key so the random stimulus reshapes when advancing trials */
   stimulusKey: number;
-  /** Trials already answered (0 before first response) */
-  completedTrials: number;
-  maxTrials: number;
-  phase?: string;
-  practiceState?: { subPhase: string } | null;
-  /** Hide footer when PracticeProgressBar shows the count (main/extension). */
-  hideCompletedCaption?: boolean;
+  /** Practice-only feedback shown during the "feedback" screen; blank for main/extension. */
+  feedback?: { label: string; className: string } | null;
 };
 
-export function SRTTrial({
-  status,
-  stimulusKey,
-  completedTrials,
-  maxTrials,
-  phase,
-  practiceState,
-  hideCompletedCaption = false,
-}: Props) {
+export function SRTTrial({ status, stimulusKey, feedback }: Props) {
   const { colorClasses, shapeClasses } = useMemo(() => ({
     colorClasses: STIMULUS_COLORS[Math.floor(Math.random() * STIMULUS_COLORS.length)],
     shapeClasses: STIMULUS_SHAPES[Math.floor(Math.random() * STIMULUS_SHAPES.length)].className,
   }), [stimulusKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const done = Math.min(completedTrials, maxTrials);
-
   return (
     <div className="flex min-h-[400px] flex-col items-center justify-center">
       {status === "waiting" && (
-        <div className="flex flex-col items-center gap-4">
-          <div className="text-7xl font-bold text-foreground" aria-hidden>+</div>
-          <p className="text-muted-foreground">Fixate until the target appears</p>
-        </div>
+        <div className="text-7xl font-bold text-foreground" aria-hidden>+</div>
       )}
       {status === "stimulus" && (
-        <div className="flex flex-col items-center gap-6">
-          <div
-            className={`h-24 w-24 shadow-lg ring-4 ${colorClasses} ${shapeClasses}`}
-            aria-hidden
-          />
-          <p className="text-lg font-medium text-foreground">Press SPACE</p>
-        </div>
+        <div
+          className={`h-24 w-24 shadow-lg ring-4 ${colorClasses} ${shapeClasses}`}
+          aria-hidden
+        />
       )}
-      {status === "responded" && (
-        <div className="text-muted-foreground">Recorded</div>
-      )}
-      {!hideCompletedCaption && (
-        <p className="mt-8 text-sm text-muted-foreground">
-          {phase === "practice" ? "Practice — " : ""}Completed {done} / {maxTrials}
-          {phase === "practice" && practiceState?.subPhase === "final" ? " — Final (no feedback)" : ""}
-        </p>
+      {status === "feedback" && feedback && (
+        <p className={`text-2xl font-semibold ${feedback.className}`}>{feedback.label}</p>
       )}
     </div>
   );

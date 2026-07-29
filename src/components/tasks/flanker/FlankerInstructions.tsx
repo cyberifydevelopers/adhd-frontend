@@ -35,8 +35,8 @@ export function FlankerInstructions({ onStart, isReinstruction, reinstructionLev
               and <kbd className="rounded border bg-muted px-1.5 py-0.5">→</kbd> when it points right.
             </p>
             <p className="text-sm text-muted-foreground">
-              Sometimes all arrows point the same way (congruent). Sometimes the center arrow points the opposite
-              direction (incongruent). Always respond based on the center arrow.
+              Sometimes all arrows point the same way. Sometimes the center arrow points the opposite
+              direction. Always respond based on the center arrow.
             </p>
           </>
         )}

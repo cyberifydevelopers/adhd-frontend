@@ -37,14 +37,16 @@ import {
   tryMainAdaptiveStop,
 } from "@/lib/mainAdaptiveIntegration";
 import { buildFlankerCheckpoint } from "@/lib/mainAdaptiveBridge";
-import { isTaskPaused, rtTrialStateAfterPauseCleanup } from "@/lib/taskPauseGuard";
+import { isTaskPaused } from "@/lib/taskPauseGuard";
 import { ageFromIsoDateOfBirth } from "@/lib/digitSpanSpec";
 import { flankerLargeStimulusFromAge } from "@/lib/mainTestAgeDefaults";
 
 const MAIN_LIMITS = getMainTrialLimits("flanker");
 const MAIN_TRIALS = MAIN_LIMITS.maxTrials;
-const RESPONSE_TIMEOUT_MS = 2000;
-const MIN_READY_DISPLAY_MS = 800;
+const RESPONSE_TIMEOUT_MS = 1500;
+const FIXATION_MIN_MS = 800;
+const FIXATION_MAX_MS = 1200;
+const FEEDBACK_DISPLAY_MS = 1000;
 const WARMUP_TRIALS = ADAPTIVE_DEFAULTS.warmupTrials;
 /** Spec stable-stop: need ≥15 trials per congruence cell before adaptive stop can fire. */
 const FLANKER_MIN_CELL_TRIALS = 15;
@@ -159,7 +161,7 @@ function applyFlankerCellBalance(trial: FlankerTrial, events: Record<string, unk
 function adaptFlanker(params: FlankerAdaptiveParams, perf: PerformanceModel): FlankerAdaptiveParams {
   if (perf.totalTrials < WARMUP_TRIALS) return params;
 
-  let { incongruentRatio, foreperiodMin, foreperiodMax } = params;
+  let { incongruentRatio } = params;
 
   // Incongruent ratio based on incongruent accuracy
   const incongAcc = perf.conditionAccuracy["incongruent"] ?? 0;
@@ -169,16 +171,7 @@ function adaptFlanker(params: FlankerAdaptiveParams, perf: PerformanceModel): Fl
     incongruentRatio = clamp(incongruentRatio - 0.02, 0.3, 0.8);
   }
 
-  // Foreperiod range based on rtCoV
-  if (perf.rtCoV > 0.3) {
-    foreperiodMax = clamp(foreperiodMax + 50, foreperiodMin + 300, 3500);
-    foreperiodMin = clamp(foreperiodMin + 50, 400, foreperiodMax - 300);
-  } else if (perf.rtCoV < 0.15) {
-    foreperiodMin = clamp(foreperiodMin - 50, 400, foreperiodMax - 300);
-    foreperiodMax = clamp(foreperiodMax - 50, foreperiodMin + 300, 3500);
-  }
-
-  return { incongruentRatio, foreperiodMin, foreperiodMax };
+  return { ...params, incongruentRatio };
 }
 
 /** Bucketed params so micro ratio steps (0.02) do not reset the trials-at-difficulty counter every trial. */
@@ -214,7 +207,7 @@ type FlankerState = {
   trialIndex: number;
   trials: FlankerTrial[];
   maxTrials: number;
-  status: "waiting" | "stimulus" | "responded";
+  status: "waiting" | "stimulus" | "feedback";
   events: Record<string, unknown>[];
   _refs: Refs;
   additionalTrials: number;
@@ -464,7 +457,7 @@ export const flankerStore = create<FlankerState>((set, get) => ({
       return;
     }
 
-    const totalReadyMs = MIN_READY_DISPLAY_MS + trial.foreperiod;
+    const fixationMs = FIXATION_MIN_MS + Math.random() * (FIXATION_MAX_MS - FIXATION_MIN_MS);
     _refs.timeoutId = setTimeout(() => {
       _refs.stimulusOnset = performance.now();
       _refs.activeStimulusTrialIndex = idx;
@@ -476,11 +469,6 @@ export const flankerStore = create<FlankerState>((set, get) => ({
         const latest = get();
         const r = latest._refs;
         if (latest.phase !== phase || latest.trialIndex !== idx) return;
-        if (latest.status === "responded") {
-          set({ status: "waiting", trialIndex: idx + 1 });
-          _refs.timeoutId = null;
-          return;
-        }
         if (r.activeStimulusTrialIndex !== idx || r.stimulusOutcomeRecorded) return;
         r.stimulusOutcomeRecorded = true;
         const recordEvent = phase === "practice" ? addPracticeEvent : addEvent;
@@ -498,28 +486,24 @@ export const flankerStore = create<FlankerState>((set, get) => ({
         });
         const s = get();
         if (s.phase !== phase || s.trialIndex !== idx) return;
-        if (
-          (phase === "main" || phase === "extension") &&
-          catStore.getState().shouldTriggerBlockEnd
-        ) {
+        const holdAtEnd =
+          (phase === "main" || phase === "extension") && catStore.getState().shouldTriggerBlockEnd;
+        set({ status: "feedback", trialIndex: holdAtEnd ? idx : idx + 1 });
+        _refs.timeoutId = setTimeout(() => {
+          if (get().phase !== phase) { _refs.timeoutId = null; return; }
           set({ status: "waiting" });
-        } else {
-          set({ status: "waiting", trialIndex: idx + 1 });
+          _refs.timeoutId = null;
+        }, FEEDBACK_DISPLAY_MS);
+        if (!holdAtEnd && (phase === "main" || phase === "extension")) {
+          const afterAdvance = get();
+          const nextIdx = idx + 1;
+          if (nextIdx < afterAdvance._refs.maxTrials && afterAdvance.trials.length <= nextIdx) {
+            const nextTrial = buildOneTrial(afterAdvance._refs.adaptiveParams, afterAdvance._refs.events);
+            set((prev) => ({ trials: [...prev.trials, nextTrial] }));
+          }
         }
-        const afterAdvance = get();
-        const nextIdx = idx + 1;
-        if (
-          !catStore.getState().shouldTriggerBlockEnd &&
-          (phase === "main" || phase === "extension") &&
-          nextIdx < afterAdvance._refs.maxTrials &&
-          afterAdvance.trials.length <= nextIdx
-        ) {
-          const nextTrial = buildOneTrial(afterAdvance._refs.adaptiveParams, afterAdvance._refs.events);
-          set((prev) => ({ trials: [...prev.trials, nextTrial] }));
-        }
-        _refs.timeoutId = null;
       }, RESPONSE_TIMEOUT_MS);
-    }, totalReadyMs);
+    }, fixationMs);
   },
 
   recordResponse: (responseKey, isCorrect) => {
@@ -550,25 +534,22 @@ export const flankerStore = create<FlankerState>((set, get) => ({
 
     const s = get();
     if (s.phase !== phase || s.trialIndex !== trialIndex) return;
-    if (phase === "main" || phase === "extension") {
-      if (!catStore.getState().shouldTriggerBlockEnd) {
-        set({ status: "waiting", trialIndex: trialIndex + 1 });
-      } else {
-        set({ status: "waiting" });
+    const holdAtEnd =
+      (phase === "main" || phase === "extension") && catStore.getState().shouldTriggerBlockEnd;
+    set({ status: "feedback", trialIndex: holdAtEnd ? trialIndex : trialIndex + 1 });
+    _refs.timeoutId = setTimeout(() => {
+      if (get().phase !== phase) { _refs.timeoutId = null; return; }
+      set({ status: "waiting" });
+      _refs.timeoutId = null;
+    }, FEEDBACK_DISPLAY_MS);
+
+    if (!holdAtEnd && (phase === "main" || phase === "extension")) {
+      const afterAdvance = get();
+      const nextIdx = trialIndex + 1;
+      if (nextIdx < afterAdvance._refs.maxTrials && afterAdvance.trials.length <= nextIdx) {
+        const nextTrial = buildOneTrial(afterAdvance._refs.adaptiveParams, afterAdvance._refs.events);
+        set((prev) => ({ trials: [...prev.trials, nextTrial] }));
       }
-    } else {
-      set({ status: "waiting", trialIndex: trialIndex + 1 });
-    }
-    const afterAdvance = get();
-    const nextIdx = trialIndex + 1;
-    if (
-      !catStore.getState().shouldTriggerBlockEnd &&
-      (phase === "main" || phase === "extension") &&
-      nextIdx < afterAdvance._refs.maxTrials &&
-      afterAdvance.trials.length <= nextIdx
-    ) {
-      const nextTrial = buildOneTrial(afterAdvance._refs.adaptiveParams, afterAdvance._refs.events);
-      set((prev) => ({ trials: [...prev.trials, nextTrial] }));
     }
   },
 
@@ -872,8 +853,11 @@ export const flankerStore = create<FlankerState>((set, get) => ({
   },
 
   cleanup: () => {
-    const pauseAdvance = rtTrialStateAfterPauseCleanup(get());
-    if (pauseAdvance) set(pauseAdvance);
+    const { phase, status } = get();
+    const activePhase = phase === "practice" || phase === "main" || phase === "extension";
+    if (activePhase && (status === "stimulus" || status === "feedback")) {
+      set({ status: "waiting" });
+    }
     const { _refs } = get();
     if (_refs.timeoutId) {
       clearTimeout(_refs.timeoutId);
