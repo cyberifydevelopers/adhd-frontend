@@ -3,6 +3,7 @@
  * Practice phases must not call these builders.
  */
 import type { MainAdaptiveCheckpointData } from "@/lib/mainAdaptiveEngine";
+import { isCptAnticipatory } from "@/lib/cptEvents";
 import {
   SST_MIN_STOP_TRIALS_FOR_STABLE_STOP,
   SST_RECENT_STOP_WINDOW_SIZE,
@@ -394,12 +395,16 @@ export function buildCptCheckpoint(
   const targets = events.filter((e) => e.event_type === "target");
   const nonTargets = events.filter((e) => e.event_type === "nontarget");
   const omissions = targets.filter((e) => e.reaction_time_ms == null).length;
-  const commissions = nonTargets.filter((e) => e.reaction_time_ms != null).length;
+  // Anticipatory presses on non-targets are their own category, not commissions.
+  const nonTargetAnticipatory = nonTargets.filter(isCptAnticipatory).length;
+  const commissions = nonTargets.filter(
+    (e) => e.reaction_time_ms != null && !isCptAnticipatory(e),
+  ).length;
   const respondedTargets = targets.filter((e) => typeof e.reaction_time_ms === "number");
   const targetRts = respondedTargets.map((e) => e.reaction_time_ms as number);
-  const anticipatoryCount = targetRts.filter((rt) => rt < ANT_MS).length;
-  const cptAnticipatoryRate =
-    targetRts.length > 0 ? anticipatoryCount / targetRts.length : undefined;
+  const anticipatoryCount = targetRts.filter((rt) => rt < ANT_MS).length + nonTargetAnticipatory;
+  const respondedCount = targetRts.length + nonTargetAnticipatory;
+  const cptAnticipatoryRate = respondedCount > 0 ? anticipatoryCount / respondedCount : undefined;
   const rts = events
     .filter(
       (e) =>

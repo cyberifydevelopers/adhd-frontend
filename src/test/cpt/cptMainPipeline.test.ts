@@ -42,19 +42,12 @@ describe("CPT main test — spec limits & MVP config", () => {
     expect(ADAPTIVE_DEFAULTS.cpt.targetRatio).toBe(0.225);
   });
 
-  it("uses jittered ISI 1000–2000 ms and response window for scored block", () => {
-    expect(ADAPTIVE_DEFAULTS.cpt.isiMin).toBe(1000);
-    expect(ADAPTIVE_DEFAULTS.cpt.isiMax).toBe(2000);
-    expect(ADAPTIVE_DEFAULTS.cpt.responseWindow).toBeGreaterThan(0);
-  });
-
-  it("buildCPTTrials assigns ISI within configured bounds", () => {
+  it("buildCPTTrials yields only X targets and other-letter non-targets", () => {
     const trials = buildCPTTrials(40);
     expect(trials).toHaveLength(40);
     for (const t of trials) {
-      expect(t.isi_ms).toBeGreaterThanOrEqual(ADAPTIVE_DEFAULTS.cpt.isiMin);
-      expect(t.isi_ms).toBeLessThanOrEqual(ADAPTIVE_DEFAULTS.cpt.isiMax);
       expect(["target", "nontarget"]).toContain(t.type);
+      expect(t.type === "target").toBe(t.letter === "X");
     }
   });
 });

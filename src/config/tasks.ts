@@ -16,7 +16,7 @@ export const TASK_ROUTES: Record<string, string> = {
 };
 
 export const TASK_NAMES: Record<string, string> = {
-  cpt: "CPT (Continuous Performance)",
+  cpt: "Continuous Performance Task (CPT)",
   sst: "SST (Stop-Signal Task)",
   digit_span: "Digit Span",
   time_estimation: "Time Estimation",

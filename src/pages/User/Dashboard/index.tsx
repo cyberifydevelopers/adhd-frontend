@@ -271,9 +271,6 @@ export default function UserDashboard() {
                     </p>
                   </div>
                 )}
-                <p className="mb-3 text-xs text-muted-foreground">
-                  Tasks selected in Assign Tests are shown here immediately in order.
-                </p>
                 <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {visibleAssignments.map((assignment, index) => {
                     const taskPath = getTaskPath(assignment.test_name);

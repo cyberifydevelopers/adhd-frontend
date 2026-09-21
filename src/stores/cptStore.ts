@@ -17,6 +17,7 @@ import {
   type IRTItem,
 } from "@/lib/irtEngine";
 import { CPT_ITEM_BANK } from "@/lib/itemBanks";
+import { cptResponseType, isCptAnticipatory } from "@/lib/cptEvents";
 import { scoreCPT } from "@/lib/irtScoring";
 import {
   createPracticeState,
@@ -42,8 +43,16 @@ const MAIN_LIMITS = getMainTrialLimits("cpt");
 const MAIN_BLOCK_SIZE = MAIN_LIMITS.maxTrials;
 const EXTENSION_BLOCK_SIZE = 25;
 const FATIGUE_SLOPE_THRESHOLD_MS = 5;
-/** Spec MVP: stimulus duration 250 ms (fixed block). */
-const CPT_STIMULUS_MS = 250;
+/** Fixation "+" screen shown before every stimulus (practice and main). */
+export const CPT_FIXATION_MS = 500;
+/** Stimulus (X or other letter) display duration. */
+export const CPT_STIMULUS_MS = 250;
+/** Practice feedback screen duration. Main trials use a blank of the same length instead (see CPT_RESPONSE_WINDOW_MS). */
+export const CPT_FEEDBACK_MS = 750;
+/** Responses count from this long after stimulus onset; earlier presses are anticipatory. */
+export const CPT_MIN_RESPONSE_MS = 100;
+/** Last moment after stimulus onset at which a press is still scored (stimulus 250 ms + blank 750 ms). */
+export const CPT_RESPONSE_WINDOW_MS = 1000;
 /**
  * When false (MVP): fixed target probability / ISI / response window from config; no `adaptCPT`; no IRT-shaped trials.
  * When true: restores adaptive difficulty + IRT item bank after warmup (optional extended / fatigue-style analyses).
@@ -58,7 +67,7 @@ function computeCptMetrics(
   const targets = events.filter((e) => e.event_type === "target");
   const nonTargets = events.filter((e) => e.event_type === "nontarget");
   const omissions = targets.filter((e) => e.reaction_time_ms == null);
-  const commissions = nonTargets.filter((e) => e.reaction_time_ms != null);
+  const commissions = nonTargets.filter((e) => e.reaction_time_ms != null && !isCptAnticipatory(e));
   const targetRTs = targets
     .map((e) => e.reaction_time_ms as number | null)
     .filter((rt): rt is number => rt != null);
@@ -81,9 +90,45 @@ function computeCptMetrics(
   };
 }
 
-export type CPTTrial = { letter: string; type: "target" | "nontarget"; isi_ms: number };
+export type CPTTrial = { letter: string; type: "target" | "nontarget" };
 
 export type CPTPhase = "instructions" | "practice" | "main_ready" | "main" | "extension" | "complete";
+
+/** What is on screen during a trial. `blank` is the post-stimulus wait; `feedback` is practice-only. */
+export type CPTTrialScreen = "fixation" | "stimulus" | "blank" | "feedback";
+
+export type CptResponseType = "correct_go" | "correct_nogo" | "omission" | "commission" | "anticipatory";
+
+export type CptResponseOutcome = {
+  responseType: CptResponseType;
+  isCorrect: boolean;
+  reactionTimeMs: number | null;
+};
+
+/**
+ * Score one trial from the first keypress, measured relative to stimulus onset (negative = before onset).
+ * - < 100 ms (incl. before onset): anticipatory, for any letter
+ * - 100–1000 ms: correct go on X, commission on any other letter
+ * - none in window: omission on X, correct no-go on any other letter
+ * A press after 1000 ms is not scored on this trial, so it is treated as no response.
+ */
+export function classifyCptResponse(
+  trialType: CPTTrial["type"],
+  pressOffsetMs: number | null,
+): CptResponseOutcome {
+  if (pressOffsetMs != null && pressOffsetMs < CPT_MIN_RESPONSE_MS) {
+    return { responseType: "anticipatory", isCorrect: false, reactionTimeMs: Math.max(0, pressOffsetMs) };
+  }
+  const inWindow = pressOffsetMs != null && pressOffsetMs <= CPT_RESPONSE_WINDOW_MS;
+  if (trialType === "target") {
+    return inWindow
+      ? { responseType: "correct_go", isCorrect: true, reactionTimeMs: pressOffsetMs }
+      : { responseType: "omission", isCorrect: false, reactionTimeMs: null };
+  }
+  return inWindow
+    ? { responseType: "commission", isCorrect: false, reactionTimeMs: pressOffsetMs }
+    : { responseType: "correct_nogo", isCorrect: true, reactionTimeMs: null };
+}
 
 type CPTAdaptiveParams = {
   targetRatio: number;
@@ -97,11 +142,7 @@ function buildOneTrial(params: CPTAdaptiveParams): CPTTrial {
   const letter = isTarget
     ? TARGET_LETTER
     : NON_TARGET_LETTERS[Math.floor(Math.random() * NON_TARGET_LETTERS.length)];
-  return {
-    letter,
-    type: isTarget ? "target" : "nontarget",
-    isi_ms: params.isiMin + Math.random() * (params.isiMax - params.isiMin),
-  };
+  return { letter, type: isTarget ? "target" : "nontarget" };
 }
 
 export function buildCPTTrials(count: number): CPTTrial[] {
@@ -153,6 +194,8 @@ type Refs = {
   stimulusTimeoutId: ReturnType<typeof setTimeout> | undefined;
   /** Active Space handler for current trial — must detach on cleanup / re-advance so one keypress can't score twice */
   keydownHandler: ((e: KeyboardEvent) => void) | null;
+  /** Bumped by every advanceTrial and cleanup so a trial's late callbacks can tell they were cancelled. */
+  trialToken: number;
   rafId: number;
   perfModel: PerformanceModel;
   adaptiveParams: CPTAdaptiveParams;
@@ -172,6 +215,7 @@ type CPTState = {
   trials: CPTTrial[];
   maxTrials: number;
   currentLetter: string | null;
+  trialScreen: CPTTrialScreen;
   events: Record<string, unknown>[];
   droppedFrames: number;
   additionalTrials: number;
@@ -213,6 +257,7 @@ export const cptStore = create<CPTState>((set, get) => ({
   trials: [],
   maxTrials: MAIN_BLOCK_SIZE,
   currentLetter: null,
+  trialScreen: "fixation",
   events: [],
   droppedFrames: 0,
   additionalTrials: 0,
@@ -230,6 +275,7 @@ export const cptStore = create<CPTState>((set, get) => ({
     nextTrialTimeoutId: undefined,
     stimulusTimeoutId: undefined,
     keydownHandler: null,
+    trialToken: 0,
     rafId: 0,
     perfModel: createPerformanceModel(ADAPTIVE_DEFAULTS.windowSize),
     adaptiveParams: { ...defaultAdaptiveParams },
@@ -318,17 +364,17 @@ export const cptStore = create<CPTState>((set, get) => ({
     if (!practiceState) return;
     const config = _refs.practiceConfig;
 
-    // Classify error
+    // Feedback category: omission → "too slow", commission → "incorrect", anticipatory → "premature".
     const rt = ev.reaction_time_ms as number | null;
-    const eventType = ev.event_type as string;
     const isCorrect = ev.is_correct === true;
-    let errorType: PracticeEvent["errorType"] = "correct";
-    if (!isCorrect) {
-      if (eventType === "target" && rt == null) errorType = "omission";
-      else if (eventType === "nontarget" && rt != null) errorType = "premature";
-      else if (rt != null && rt < 100) errorType = "premature";
-      else errorType = "incorrect";
-    }
+    const responseType = cptResponseType(ev);
+    const errorType: PracticeEvent["errorType"] = isCorrect
+      ? "correct"
+      : responseType === "omission"
+        ? "omission"
+        : responseType === "anticipatory"
+          ? "premature"
+          : "incorrect";
 
     // Record in engine
     const updated = recordPracticeTrial(practiceState, { isCorrect, errorType, reactionTimeMs: rt });
@@ -452,17 +498,11 @@ export const cptStore = create<CPTState>((set, get) => ({
         const item = selectNextItem(CPT_ITEM_BANK, _refs.irtState.theta, _refs.irtState.administeredItemIds);
         _refs.currentIRTItem = item;
         const targetRatio = item.params.targetRatio as number;
-        const isiCenter = item.params.isiCenter as number;
-        const isiJitter = (Math.random() - 0.5) * 200;
         const isTarget = Math.random() < targetRatio;
         const letter = isTarget
           ? TARGET_LETTER
           : NON_TARGET_LETTERS[Math.floor(Math.random() * NON_TARGET_LETTERS.length)];
-        nextTrial = {
-          letter,
-          type: isTarget ? "target" : "nontarget",
-          isi_ms: Math.max(400, isiCenter + isiJitter),
-        };
+        nextTrial = { letter, type: isTarget ? "target" : "nontarget" };
       } else {
         _refs.currentIRTItem = null;
         nextTrial = buildOneTrial(_refs.adaptiveParams);
@@ -476,131 +516,92 @@ export const cptStore = create<CPTState>((set, get) => ({
 
     const blockIndex = phase === "extension" ? 1 : 0;
     const trial = currentTrials[trialIndex];
-    const responseWindow = _refs.adaptiveParams.responseWindow;
+    const baseIndex = blockIndex > 0 ? MAIN_BLOCK_SIZE + trialIndex : trialIndex;
+    const isPractice = phase === "practice";
+    // Gap between one stimulus offset and the next onset: blank (+ practice feedback) + fixation.
+    const isiMs =
+      CPT_RESPONSE_WINDOW_MS - CPT_STIMULUS_MS + (isPractice ? CPT_FEEDBACK_MS : 0) + CPT_FIXATION_MS;
 
-    const presentStimulus = () => {
-    const onset = performance.now();
-    set({ currentLetter: trial.letter });
+    // Every trial runs on a fixed clock: fixation → stimulus → blank until 1000 ms after onset, then (practice
+    // only) feedback. The first press since the fixation appeared is the one that gets scored; it never
+    // ends the trial early.
+    _refs.trialToken += 1;
+    const token = _refs.trialToken;
+    let onset = 0;
+    let firstPressMs: number | null = null;
 
-    _refs.stimulusTimeoutId = setTimeout(() => {
-      _refs.stimulusTimeoutId = undefined;
-      set({ currentLetter: null });
-      let responded = false;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.key !== " ") return;
+      e.preventDefault();
+      if (firstPressMs == null) firstPressMs = performance.now();
+    };
 
-      const baseIndex = blockIndex > 0 ? MAIN_BLOCK_SIZE + trialIndex : trialIndex;
-      const makeEvent = (
-        keypressMs: number | null,
-        rt: number | null,
-        isCorrect: boolean
-      ) => ({
+    const finalizeTrial = () => {
+      _refs.responseTimeoutId = undefined;
+      window.removeEventListener("keydown", handleKey);
+      _refs.keydownHandler = null;
+
+      const pressOffsetMs = firstPressMs == null ? null : firstPressMs - onset;
+      const outcome = classifyCptResponse(trial.type, pressOffsetMs);
+      const pressed = outcome.reactionTimeMs != null;
+      if (isPractice) set({ trialScreen: "feedback" });
+      recordEvent({
         task_name: "cpt",
         trial_index: baseIndex,
         stimulus_onset_ms: onset,
-        keypress_ms: keypressMs,
-        reaction_time_ms: rt,
-        response_key: keypressMs != null ? " " : null,
+        keypress_ms: pressed ? firstPressMs : null,
+        reaction_time_ms: outcome.reactionTimeMs,
+        response_key: pressed ? " " : null,
         correct_key: trial.type === "target" ? " " : null,
-        is_correct: isCorrect,
+        is_correct: outcome.isCorrect,
         event_type: trial.type,
-        isi_ms: trialIndex === 0 ? null : trial.isi_ms,
+        isi_ms: trialIndex === 0 ? null : isiMs,
         expected_response: trial.type === "target",
+        extra_data: {
+          response_type: outcome.responseType,
+          // Anticipatory presses can land before onset (negative offset); RT above is clamped to 0.
+          ...(outcome.responseType === "anticipatory" && { press_offset_ms: pressOffsetMs }),
+        },
       });
 
-      const goNext = () => {
-        if (_refs.responseTimeoutId) {
-          clearTimeout(_refs.responseTimeoutId);
-          _refs.responseTimeoutId = undefined;
+      // recordEvent can cancel this trial (adaptive stop, or practice finishing), which calls cleanup().
+      if (_refs.trialToken !== token) {
+        if (isPractice) {
+          // Practice just ended: keep this trial's feedback up for its normal duration, then blank it.
+          setTimeout(() => {
+            if (get().phase === "practice") set({ trialScreen: "blank" });
+          }, CPT_FEEDBACK_MS);
         }
-        if (
-          (phase === "main" || phase === "extension") &&
-          catStore.getState().shouldTriggerBlockEnd
-        ) {
-          return;
-        }
-        const s = get();
-        if (s.phase !== phase) return;
-        if (phase === "main" || phase === "extension") {
-          if (s.trialIndex !== trialIndex) return;
-          set({ trialIndex: trialIndex + 1 });
-        } else {
-          if (s.trialIndex !== trialIndex) return;
-          set({ trialIndex: trialIndex + 1 });
-        }
-        _refs.nextTrialTimeoutId = setTimeout(() => {
-          _refs.nextTrialTimeoutId = undefined;
-          if (catStore.getState().shouldTriggerBlockEnd) return;
-          get().advanceTrial();
-        }, trial.isi_ms);
-      };
-
-      const finishTrialOrStop = () => {
-        if (
-          (phase === "main" || phase === "extension") &&
-          catStore.getState().shouldTriggerBlockEnd
-        ) {
-          if (_refs.nextTrialTimeoutId) {
-            clearTimeout(_refs.nextTrialTimeoutId);
-            _refs.nextTrialTimeoutId = undefined;
-          }
-          get().cleanup();
-          set({ currentLetter: null });
-          return;
-        }
-        goNext();
-      };
-
-      const handleKey = (e: KeyboardEvent) => {
-        if (e.repeat) return;
-        if (e.key !== " ") return;
-        if (responded) return;
-        e.preventDefault();
-        responded = true;
-        const keypressMs = performance.now();
-        const rt = keypressMs - onset;
-        const correct = trial.type === "target";
-        recordEvent(makeEvent(keypressMs, rt, correct));
-        window.removeEventListener("keydown", handleKey);
-        _refs.keydownHandler = null;
-        finishTrialOrStop();
-      };
-
-      _refs.keydownHandler = handleKey;
-      window.addEventListener("keydown", handleKey);
-
-      if (trial.type === "target") {
-        _refs.responseTimeoutId = setTimeout(() => {
-          _refs.responseTimeoutId = undefined;
-          window.removeEventListener("keydown", handleKey);
-          _refs.keydownHandler = null;
-          if (!responded) {
-            recordEvent(makeEvent(null, null, false));
-          }
-          finishTrialOrStop();
-        }, responseWindow);
-      } else {
-        _refs.responseTimeoutId = setTimeout(() => {
-          _refs.responseTimeoutId = undefined;
-          window.removeEventListener("keydown", handleKey);
-          _refs.keydownHandler = null;
-          if (!responded) {
-            recordEvent(makeEvent(null, null, true));
-          }
-          finishTrialOrStop();
-        }, responseWindow);
+        return;
       }
-    }, CPT_STIMULUS_MS);
+      const s = get();
+      if (s.phase !== phase || s.trialIndex !== trialIndex) return;
+      set({ trialIndex: trialIndex + 1 });
+
+      if (!isPractice) {
+        // The 750 ms blank already elapsed inside the response window; go straight to the next fixation.
+        get().advanceTrial();
+        return;
+      }
+      _refs.nextTrialTimeoutId = setTimeout(() => {
+        _refs.nextTrialTimeoutId = undefined;
+        get().advanceTrial();
+      }, CPT_FEEDBACK_MS);
     };
 
-    if (trialIndex === 0) {
-      // Show the fixation cross first, same as the inter-stimulus interval between later trials.
-      set({ currentLetter: null });
+    set({ currentLetter: null, trialScreen: "fixation" });
+    _refs.keydownHandler = handleKey;
+    window.addEventListener("keydown", handleKey);
+
+    _refs.stimulusTimeoutId = setTimeout(() => {
+      onset = performance.now();
+      set({ currentLetter: trial.letter, trialScreen: "stimulus" });
       _refs.stimulusTimeoutId = setTimeout(() => {
         _refs.stimulusTimeoutId = undefined;
-        presentStimulus();
-      }, trial.isi_ms);
-    } else {
-      presentStimulus();
-    }
+        set({ currentLetter: null, trialScreen: "blank" });
+      }, CPT_STIMULUS_MS);
+      _refs.responseTimeoutId = setTimeout(finalizeTrial, CPT_RESPONSE_WINDOW_MS);
+    }, CPT_FIXATION_MS);
   },
 
   startPractice: async () => {
@@ -935,6 +936,7 @@ export const cptStore = create<CPTState>((set, get) => ({
 
   cleanup: () => {
     const { _refs } = get();
+    _refs.trialToken += 1;
     if (_refs.responseTimeoutId) clearTimeout(_refs.responseTimeoutId);
     if (_refs.nextTrialTimeoutId) clearTimeout(_refs.nextTrialTimeoutId);
     if (_refs.stimulusTimeoutId) clearTimeout(_refs.stimulusTimeoutId);

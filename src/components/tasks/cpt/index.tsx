@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { TaskLayout } from "../TaskLayout";
 import { TaskTransition } from "../TaskTransition";
-import { PracticeFeedback } from "../PracticeFeedback";
 import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { CPTInstructions } from "./CPTInstructions";
@@ -43,13 +42,7 @@ export default function ContinuousPerformanceTest() {
   const sessionId = cptStore((s) => s.sessionId);
   const practiceState = cptStore((s) => s.practiceState);
   const lastPracticeFeedback = cptStore((s) => s.lastPracticeFeedback);
-  const lastPracticeCorrectKey = cptStore((s) => {
-    const last = s._refs.practiceEvents[s._refs.practiceEvents.length - 1] as Record<string, unknown> | undefined;
-    return (last?.correct_key as string | null | undefined) ?? null;
-  });
-  const practiceFeedbackKey = cptStore((s) => s._refs.practiceEvents.length);
-  const mainFeedbackKey = cptStore((s) => s._refs.events.length);
-  const lastMainEvent = cptStore((s) => s._refs.events[s._refs.events.length - 1] as Record<string, unknown> | undefined);
+  const trialScreen = cptStore((s) => s.trialScreen);
   const practiceReinstruction = cptStore((s) => s.practiceReinstruction);
   const practiceReinstructionLevel = cptStore((s) => s.practiceReinstructionLevel);
   const practiceReinstructionHint = cptStore((s) => s.practiceReinstructionHint);
@@ -253,17 +246,6 @@ export default function ContinuousPerformanceTest() {
   }
 
   if ((phase === "practice" || phase === "main" || phase === "extension") && trials.length > 0) {
-    const feedbackType = phase === "practice"
-      ? lastPracticeFeedback
-      : lastMainEvent
-        ? ((lastMainEvent.is_correct === true
-          ? "correct"
-          : ((lastMainEvent.reaction_time_ms as number | null | undefined) == null ? "omission" : "incorrect")))
-        : null;
-    const feedbackAnswer = phase === "practice"
-      ? lastPracticeCorrectKey
-      : ((lastMainEvent?.correct_key as string | null | undefined) ?? null);
-    const feedbackKey = phase === "practice" ? practiceFeedbackKey : mainFeedbackKey;
     const practiceCap = cptStore.getState()._refs.practiceConfig.maxTrials;
 
     return (
@@ -296,14 +278,11 @@ export default function ContinuousPerformanceTest() {
             ) : undefined
           }
         >
-          <CPTStimulus letter={currentLetter} />
-          {phase === "practice" ? (
-            <PracticeFeedback
-              feedbackType={feedbackType}
-              correctAnswer={feedbackAnswer}
-              feedbackKey={feedbackKey}
-            />
-          ) : null}
+          <CPTStimulus
+            letter={currentLetter}
+            screen={trialScreen}
+            feedback={phase === "practice" ? lastPracticeFeedback : null}
+          />
         </TaskTrialCard>
       </TaskLayout>
     );
