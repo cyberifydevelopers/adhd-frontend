@@ -17,14 +17,8 @@ export function digitSpanOutcomeAfterTwoTrials(correctCount: number): "fail" | "
   return correctCount >= 1 ? "advance" : "fail";
 }
 
-/** Recall window: span length + 3 s (e.g. 3 digits → 6 s, 9 digits → 12 s). */
-export function digitSpanRecallMs(spanLength: number): number {
-  const n = Math.max(
-    DIGIT_SPAN_SPAN_MIN,
-    Math.min(DIGIT_SPAN_SPAN_MAX, Math.floor(spanLength)),
-  );
-  return (n + 3) * 1000;
-}
+/** Recall window: fixed 15 s for every span (client feedback 09/30). */
+export const DIGIT_SPAN_RECALL_MS = 15_000;
 
 /**
  * Starting forward span by age (main digit span).

@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { TaskLayout } from "../TaskLayout";
 import { TaskTransition } from "../TaskTransition";
-import { PracticeFeedback } from "../PracticeFeedback";
 import { PracticeProgressBar } from "../PracticeProgressBar";
 import { TaskTrialCard } from "../TaskTrialCard";
 import { DigitSpanInstructions } from "./DigitSpanInstructions";
 import { DigitSpanStimulus } from "./DigitSpanStimulus";
 import { DigitSpanInput } from "./DigitSpanInput";
+import { DigitSpanScreen } from "./DigitSpanScreen";
 import { TaskStartCountdown } from "../TaskStartCountdown";
 import { useTaskStartCountdown } from "../useTaskStartCountdown";
 import { digitSpanStore } from "@/stores/digitSpanStore";
@@ -19,8 +19,6 @@ import { usePrepareTaskFreshRun } from "@/hooks/usePrepareTaskFreshRun";
 import { DIGIT_SPAN_MAX_SEQUENCES } from "@/lib/digitSpanSpec";
 
 const FEEDBACK_SETTLE_MS = 1600;
-/** Room for absolutely positioned PracticeFeedback (bottom of container) below the progress bar */
-const PRACTICE_LAYOUT_BOTTOM_PADDING = "pb-36";
 
 export default function DigitSpanTask() {
   usePrepareTaskFreshRun(() => {
@@ -30,13 +28,12 @@ export default function DigitSpanTask() {
   const sequence = digitSpanStore((s) => s.sequence);
   const currentDigitIndex = digitSpanStore((s) => s.currentDigitIndex);
   const direction = digitSpanStore((s) => s.direction);
-  const span = digitSpanStore((s) => s.span);
-  const trialInSpan = digitSpanStore((s) => s.trialInSpan);
   const startPractice = digitSpanStore((s) => s.startPractice);
   const startExtension = digitSpanStore((s) => s.startExtension);
   const submitRecall = digitSpanStore((s) => s.submitRecall);
   const startDigitTimer = digitSpanStore((s) => s.startDigitTimer);
   const startRecallTimer = digitSpanStore((s) => s.startRecallTimer);
+  const startFeedbackTimer = digitSpanStore((s) => s.startFeedbackTimer);
   const finishAndSave = digitSpanStore((s) => s.finishAndSave);
   const cleanup = digitSpanStore((s) => s.cleanup);
   const resumeAfterPause = digitSpanStore((s) => s.resumeAfterPause);
@@ -51,13 +48,10 @@ export default function DigitSpanTask() {
     !isPractice &&
     (phase === "encoding" || phase === "recall" || phase === "extension" || phase === "complete");
   const sequencesUsedMain = digitSpanStore((s) => s.sequencesUsedMain);
-  const mainLadderPhase = digitSpanStore((s) => s.mainLadderPhase);
-  const startingSpanLabel = digitSpanStore((s) => s.startingSpan);
   const registerInvalid = digitSpanStore((s) => s.registerInvalidDigitAttempt);
   const registerEarlyEncoding = digitSpanStore((s) => s.registerEarlyEncodingResponse);
+  const practiceFeedback = digitSpanStore((s) => s.practiceFeedback);
   const practiceFeedbackType = digitSpanStore((s) => s.practiceFeedbackType);
-  const practiceCorrectAnswer = digitSpanStore((s) => s.practiceCorrectAnswer);
-  const practiceFeedbackKey = digitSpanStore((s) => s.practiceFeedbackKey);
   const { countdown, startCountdown } = useTaskStartCountdown();
   const mainCountdownStarted = useRef(false);
   /** Full rounds logged (still 0 while working on first recall) */
@@ -170,6 +164,13 @@ export default function DigitSpanTask() {
     }
   }, [phase, startRecallTimer, isPaused]);
 
+  useEffect(() => {
+    if (isPaused) return;
+    if (phase === "feedback") {
+      startFeedbackTimer();
+    }
+  }, [phase, startFeedbackTimer, isPaused]);
+
   if (countdown) {
     return (
       <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="digit_span" showMainAdaptivePanel={showMainAdaptivePanel} title="Digit Span">
@@ -197,7 +198,7 @@ export default function DigitSpanTask() {
     );
   }
 
-  if (phase === "encoding") {
+  if (phase === "encoding" || phase === "recall" || phase === "feedback") {
     return (
       <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="digit_span" showMainAdaptivePanel={showMainAdaptivePanel} title="Digit Span">
         <TaskTrialCard
@@ -209,79 +210,32 @@ export default function DigitSpanTask() {
               maxTrials={isPractice ? maxTrials : progressMax}
             />
           }
-          contentClassName={cn(isPractice && PRACTICE_LAYOUT_BOTTOM_PADDING)}
         >
-          <div className="relative w-full">
-            <DigitSpanStimulus
-              digit={sequence[currentDigitIndex] ?? null}
-              digitPosition={currentDigitIndex + 1}
-              sequenceLength={sequence.length}
-              trialInSpan={trialInSpan + 1}
-              trialsPerSpan={maxTrials}
-              spanLength={span}
-              direction={direction}
-            />
-            {isPractice && (
-              <PracticeFeedback
-                feedbackType={practiceFeedbackType}
-                correctAnswer={practiceCorrectAnswer}
-                feedbackKey={practiceFeedbackKey}
+          {phase === "encoding" && (
+            <DigitSpanStimulus digit={sequence[currentDigitIndex] ?? null} direction={direction} />
+          )}
+          {phase === "recall" && (
+            <DigitSpanScreen direction={direction}>
+              <DigitSpanInput
+                key={`${currentRoundIndex}-${sequence}`}
+                digitCount={sequence.length}
+                onSubmit={submitRecall}
+                onInvalidDigitAttempt={registerInvalid}
               />
-            )}
-          </div>
-        </TaskTrialCard>
-      </TaskLayout>
-    );
-  }
-
-  if (phase === "recall") {
-    return (
-      <TaskLayout phase={phase} cleanup={cleanup} resume={resumeAfterPause} mainAdaptiveTaskKey="digit_span" showMainAdaptivePanel={showMainAdaptivePanel} title="Digit Span">
-        <TaskTrialCard
-          progress={
-            <PracticeProgressBar
-              size="lg"
-              label={progressLabel}
-              currentTrial={progressTrial}
-              maxTrials={isPractice ? maxTrials : progressMax}
-            />
-          }
-          contentClassName={cn(
-            "flex flex-col items-center justify-center gap-4",
-            isPractice && PRACTICE_LAYOUT_BOTTOM_PADDING,
+            </DigitSpanScreen>
           )}
-        >
-          <p className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            {direction}
-          </p>
-          {!isPractice && mainLadderPhase && (
-            <p className="text-xs font-medium text-primary">
-              {mainLadderPhase === "forward" ? "Forward" : "Backward"} ladder · started length{" "}
-              {startingSpanLabel}
-            </p>
-          )}
-          <DigitSpanInput
-            key={`${currentRoundIndex}-${sequence}`}
-            digitCount={sequence.length}
-            onSubmit={submitRecall}
-            onInvalidDigitAttempt={registerInvalid}
-          />
-          <p className="text-sm text-muted-foreground">
-            {isPractice
-              ? `Trial ${trialInSpan + 1} of ${maxTrials} at length ${span}`
-              : `Sequence ${sequencesUsedMain} / ${progressMax} · span ${span} (${direction})`}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {isPractice
-              ? `Overall completed ${roundsCompleted} / ${maxTrials}`
-              : "Stop rule: backward 0/2 at a span ends the battery (often before 24 if you fail earlier)"}
-          </p>
-          {isPractice && (
-            <PracticeFeedback
-              feedbackType={practiceFeedbackType}
-              correctAnswer={practiceCorrectAnswer}
-              feedbackKey={practiceFeedbackKey}
-            />
+          {phase === "feedback" && (
+            <DigitSpanScreen>
+              <p
+                role="status"
+                className={cn(
+                  "text-center text-2xl font-semibold",
+                  practiceFeedbackType === "correct" ? "text-green-500" : "text-orange-500",
+                )}
+              >
+                {practiceFeedback}
+              </p>
+            </DigitSpanScreen>
           )}
         </TaskTrialCard>
       </TaskLayout>

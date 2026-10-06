@@ -15,7 +15,7 @@ import {
   type DigitSpanBatteryStopReason,
   ageFromIsoDateOfBirth,
   digitSpanOutcomeAfterTwoTrials,
-  digitSpanRecallMs,
+  DIGIT_SPAN_RECALL_MS,
   startingSpanFromAge,
 } from "@/lib/digitSpanSpec";
 import { usersMeService } from "@/services/usersMeService";
@@ -23,9 +23,10 @@ import { usersMeService } from "@/services/usersMeService";
 const DIGITS = "0123456789";
 const DEFAULT_MAX_TRIALS = 18;
 export const DIGIT_DISPLAY_MS = 1000;
-/** @deprecated Use {@link digitSpanRecallMs} per current span. */
-export const ROUND_RECALL_MS = digitSpanRecallMs(4);
-const PRACTICE_FEEDBACK_MS = 1000;
+/** @deprecated Use {@link DIGIT_SPAN_RECALL_MS}. */
+export const ROUND_RECALL_MS = DIGIT_SPAN_RECALL_MS;
+/** Practice-only feedback screen shown between trials. */
+export const PRACTICE_FEEDBACK_MS = 1500;
 
 /** Practice uses fixed short spans until pass criterion — independent of main staircase. */
 const PRACTICE_SPAN = 3;
@@ -54,7 +55,13 @@ function randomSequence(len: number, rng?: () => number): string {
   return s;
 }
 
-export type DigitSpanPhase = "instructions" | "encoding" | "recall" | "extension" | "complete";
+export type DigitSpanPhase =
+  | "instructions"
+  | "encoding"
+  | "recall"
+  | "feedback"
+  | "extension"
+  | "complete";
 export type DigitSpanDirection = "forward" | "backward";
 
 function randomDirection(rng?: () => number): DigitSpanDirection {
@@ -106,6 +113,8 @@ type Refs = {
   validityFailedStartingSpanForward: boolean;
   invalidInputAttempts: number;
   passedSpanHigherThanStartInForward: boolean;
+  /** Practice: next-trial step deferred until the feedback screen has been shown. */
+  pendingAdvance: (() => void) | undefined;
 };
 
 type DigitSpanState = {
@@ -139,6 +148,7 @@ type DigitSpanState = {
   advanceDigit: () => void;
   startDigitTimer: () => void;
   startRecallTimer: () => void;
+  startFeedbackTimer: () => void;
   tickRecallTimer: () => void;
   submitRecall: (response: string) => void;
   startPractice: () => Promise<void>;
@@ -166,7 +176,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
   events: [],
   roundPlan: [],
   currentRoundIndex: 0,
-  recallTimeRemainingMs: digitSpanRecallMs(PRACTICE_SPAN),
+  recallTimeRemainingMs: DIGIT_SPAN_RECALL_MS,
   additionalTrials: 0,
   isPractice: false,
   practiceFeedback: null,
@@ -217,6 +227,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
     validityFailedStartingSpanForward: false,
     invalidInputAttempts: 0,
     passedSpanHigherThanStartInForward: false,
+    pendingAdvance: undefined,
   },
 
   advanceDigit: () => {
@@ -244,9 +255,9 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
 
   startRecallTimer: () => {
     if (isTaskPaused()) return;
-    const { _refs, phase, span, submitRecall } = get();
+    const { _refs, phase, submitRecall } = get();
     if (phase !== "recall") return;
-    const recallMs = digitSpanRecallMs(span);
+    const recallMs = DIGIT_SPAN_RECALL_MS;
     set({ recallTimeRemainingMs: recallMs });
     get().tickRecallTimer();
     if (_refs.recallTimeoutId) clearTimeout(_refs.recallTimeoutId);
@@ -254,6 +265,19 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
       submitRecall("");
       _refs.recallTimeoutId = undefined;
     }, recallMs);
+  },
+
+  startFeedbackTimer: () => {
+    if (isTaskPaused()) return;
+    const { _refs, phase } = get();
+    if (phase !== "feedback") return;
+    if (_refs.timerId) clearTimeout(_refs.timerId);
+    _refs.timerId = setTimeout(() => {
+      _refs.timerId = undefined;
+      const next = _refs.pendingAdvance;
+      _refs.pendingAdvance = undefined;
+      next?.();
+    }, PRACTICE_FEEDBACK_MS);
   },
 
   tickRecallTimer: () => {
@@ -361,9 +385,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
       _refs.practiceRoundsCompleted += 1;
       _refs.practiceConsecutiveCorrect = correct ? _refs.practiceConsecutiveCorrect + 1 : 0;
       set({
-        practiceFeedback: correct
-          ? "Correct."
-          : `Not quite. The correct answer was ${expected}.`,
+        practiceFeedback: correct ? "Correct" : `Not quite. Answer was ${expected}`,
         practiceFeedbackType: correct ? "correct" : "incorrect",
         practiceCorrectAnswer: expected,
         practiceFeedbackKey: get().practiceFeedbackKey + 1,
@@ -390,7 +412,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
         phase: "encoding",
         currentRoundIndex: roundIdx,
         trialInSpan: trialInSpanDisplay,
-        recallTimeRemainingMs: digitSpanRecallMs(nextSpan),
+        recallTimeRemainingMs: DIGIT_SPAN_RECALL_MS,
         practiceFeedback: null,
         practiceFeedbackType: null,
         practiceCorrectAnswer: null,
@@ -581,7 +603,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
               maxTrials: configuredMainMaxTrials,
               events: [],
               roundPlan: [],
-              recallTimeRemainingMs: digitSpanRecallMs(PRACTICE_SPAN),
+              recallTimeRemainingMs: DIGIT_SPAN_RECALL_MS,
               mainLadderPhase: "forward",
               startingSpan: nextSpan,
               sequencesUsedMain: 0,
@@ -603,11 +625,11 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
     };
 
     if (inPractice) {
+      // Show feedback on its own screen; the component starts the timer for this phase.
       if (_refs.timerId) clearTimeout(_refs.timerId);
-      _refs.timerId = setTimeout(() => {
-        advanceToNext();
-        _refs.timerId = undefined;
-      }, PRACTICE_FEEDBACK_MS);
+      _refs.timerId = undefined;
+      _refs.pendingAdvance = advanceToNext;
+      set({ phase: "feedback" });
       return;
     }
 
@@ -668,7 +690,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
         events: [],
         roundPlan: [],
         currentRoundIndex: 0,
-        recallTimeRemainingMs: digitSpanRecallMs(PRACTICE_SPAN),
+        recallTimeRemainingMs: DIGIT_SPAN_RECALL_MS,
         mainLadderPhase: null,
       });
       toast.success("Practice started.");
@@ -704,7 +726,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
       practiceCorrectAnswer: null,
       roundPlan,
       currentRoundIndex: 0,
-      recallTimeRemainingMs: digitSpanRecallMs(PRACTICE_SPAN),
+      recallTimeRemainingMs: DIGIT_SPAN_RECALL_MS,
       phase: "encoding",
       mainLadderPhase: "forward",
     });
@@ -774,6 +796,8 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
       get().startDigitTimer();
     } else if (phase === "recall") {
       get().startRecallTimer();
+    } else if (phase === "feedback") {
+      get().startFeedbackTimer();
     } else if (phase === "extension" && currentDigitIndex < sequence.length) {
       get().startDigitTimer();
     }
@@ -801,6 +825,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
     _refs.validityFailedStartingSpanForward = false;
     _refs.invalidInputAttempts = 0;
     _refs.passedSpanHigherThanStartInForward = false;
+    _refs.pendingAdvance = undefined;
 
     catStore.getState().resetForNewTask();
 
@@ -816,7 +841,7 @@ export const digitSpanStore = create<DigitSpanState>((set, get) => ({
       events: [],
       roundPlan: [],
       currentRoundIndex: 0,
-      recallTimeRemainingMs: digitSpanRecallMs(PRACTICE_SPAN),
+      recallTimeRemainingMs: DIGIT_SPAN_RECALL_MS,
       additionalTrials: 0,
       isPractice: false,
       practiceFeedback: null,

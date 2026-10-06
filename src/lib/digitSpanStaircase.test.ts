@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { digitSpanOutcomeAfterTwoTrials, digitSpanRecallMs } from "./digitSpanSpec";
+import { DIGIT_SPAN_RECALL_MS, digitSpanOutcomeAfterTwoTrials } from "./digitSpanSpec";
 
 describe("digitSpanOutcomeAfterTwoTrials", () => {
   it("fails the ladder on 0/2", () => {
@@ -15,9 +15,8 @@ describe("digitSpanOutcomeAfterTwoTrials", () => {
   });
 });
 
-describe("digitSpanRecallMs", () => {
-  it("uses span + 3 seconds in milliseconds", () => {
-    expect(digitSpanRecallMs(3)).toBe(6000);
-    expect(digitSpanRecallMs(9)).toBe(12000);
+describe("DIGIT_SPAN_RECALL_MS", () => {
+  it("allows 15 seconds for entry", () => {
+    expect(DIGIT_SPAN_RECALL_MS).toBe(15000);
   });
 });

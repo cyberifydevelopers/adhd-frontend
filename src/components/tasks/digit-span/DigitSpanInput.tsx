@@ -62,7 +62,7 @@ export function DigitSpanInput({ digitCount, onSubmit, disabled, onInvalidDigitA
   const widthRem = Math.max(12, 2 + digitCount * 2.35);
 
   return (
-    <div className="mt-6 flex w-full max-w-[calc(100vw-2rem)] flex-col items-center gap-2 px-2">
+    <div className="flex w-full max-w-[calc(100vw-2rem)] flex-col items-center px-2">
       <input
         ref={inputRef}
         type="text"
@@ -72,7 +72,7 @@ export function DigitSpanInput({ digitCount, onSubmit, disabled, onInvalidDigitA
         disabled={disabled}
         maxLength={digitCount}
         value={value}
-        aria-describedby="digit-span-input-hint"
+        aria-label={`Enter ${digitCount} digit${digitCount === 1 ? "" : "s"}`}
         placeholder={`${digitCount} digit${digitCount === 1 ? "" : "s"}`}
         className="box-border rounded-lg border border-border bg-background px-4 py-3 text-center text-xl font-mono tracking-widest"
         style={{ width: `min(${widthRem}rem, calc(100vw - 2rem))` }}
@@ -111,9 +111,6 @@ export function DigitSpanInput({ digitCount, onSubmit, disabled, onInvalidDigitA
           applyChange(merged);
         }}
       />
-      <p id="digit-span-input-hint" className="max-w-xs text-center text-xs text-muted-foreground">
-        Numbers 0–9 only · Enter exactly {digitCount} digit{digitCount === 1 ? "" : "s"} · Submits when full
-      </p>
     </div>
   );
 }
